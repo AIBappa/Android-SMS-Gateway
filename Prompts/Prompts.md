@@ -1,0 +1,6 @@
+Prompt 1
+For this repo, the input is an SMS and the output is a web POST to a URL that is specified in settings. I want to install some filters in the settings. 1) Allowed country codes. Only those SMSese from allowed country codes should be sent to the URL . On clicking allowed country codes in settings, user can see allowed ones on UI page, plus be able to search for country codes and add them accordingly. 2) Allowed SMS message prefix. User should be able to set an allowed SMS message prefix or prefixes. Only those SMSes with allowed prefixes should be sent to the URL . User should be able to type in the prefix using keys and can add in one or more prefixes to the list. This will allow only those SMSes in which the SMS message begins with that appropriate prefix(s) to be sent to the URL 3) Allowed SMS Message Lengths. The user should be able to select the allowed SMS lengths (numbers). Only those messages fit a certain length or lengths as specified in settings willl be sent in the URL 4) It shall be individually possible via settings to set/reset these 3 filters.
+
+Prompt 2 (Yet to be given)
+The URL POST shall be encoded with HMAC. It shall be possible to set the HMAC via settings.
+

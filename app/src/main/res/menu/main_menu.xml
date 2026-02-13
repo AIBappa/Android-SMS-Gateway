@@ -34,4 +34,14 @@
         android:id="@+id/menu_ussd_test"
         android:title="Test USSD" />
 
+    <item
+        android:id="@+id/menu_filter_country"
+        android:title="Filter: Country Codes" />
+    <item
+        android:id="@+id/menu_filter_prefix"
+        android:title="Filter: Message Prefix" />
+    <item
+        android:id="@+id/menu_filter_length"
+        android:title="Filter: Message Length" />
+
 </menu>

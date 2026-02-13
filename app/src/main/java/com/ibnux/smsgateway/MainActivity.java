@@ -323,6 +323,15 @@ public class MainActivity extends AppCompatActivity {
             case R.id.menu_battery_optimization:
                 startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:"+BuildConfig.APPLICATION_ID)));
                 return true;
+            case R.id.menu_filter_country:
+                showFilterDialog("Allowed Country Codes", "filter_country_enabled", "filter_country_list", false);
+                return true;
+            case R.id.menu_filter_prefix:
+                showFilterDialog("Allowed SMS Prefixes", "filter_prefix_enabled", "filter_prefix_list", false);
+                return true;
+            case R.id.menu_filter_length:
+                showFilterDialog("Allowed Message Lengths", "filter_length_enabled", "filter_length_list", true);
+                return true;
         }
         return false;
     }
@@ -353,6 +362,79 @@ public class MainActivity extends AppCompatActivity {
         });
 
         builder2.show();
+    }
+
+    private void showFilterDialog(final String title, final String prefKeyEnabled, final String prefKeyList, final boolean isNumeric) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(title);
+
+        android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(30, 30, 30, 30);
+        scrollView.addView(layout);
+
+        final Switch switchEnable = new Switch(this);
+        switchEnable.setText("Enable Filter");
+        switchEnable.setChecked(getSharedPreferences("pref", 0).getBoolean(prefKeyEnabled, false));
+        layout.addView(switchEnable);
+
+        final TextView currentList = new TextView(this);
+        currentList.setText("Allowed items:\n" + getSharedPreferences("pref", 0).getString(prefKeyList, ""));
+        layout.addView(currentList);
+
+        TextView spacer = new TextView(this);
+        spacer.setHeight(20);
+        layout.addView(spacer);
+
+        final EditText input = new EditText(this);
+        input.setHint("Add new item");
+        if(isNumeric) input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        layout.addView(input);
+
+        android.widget.Button addBtn = new android.widget.Button(this);
+        addBtn.setText("Add");
+        layout.addView(addBtn);
+
+        android.widget.Button clearBtn = new android.widget.Button(this);
+        clearBtn.setText("Clear All");
+        layout.addView(clearBtn);
+
+        builder.setView(scrollView);
+
+        switchEnable.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                getSharedPreferences("pref", 0).edit().putBoolean(prefKeyEnabled, isChecked).apply();
+            }
+        });
+
+        addBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String newItem = input.getText().toString().trim();
+                if(!newItem.isEmpty()){
+                    String current = getSharedPreferences("pref", 0).getString(prefKeyList, "");
+                    if(current.isEmpty()) current = newItem;
+                    else current += "," + newItem;
+
+                    getSharedPreferences("pref", 0).edit().putString(prefKeyList, current).apply();
+                    currentList.setText("Allowed items:\n" + current);
+                    input.setText("");
+                }
+            }
+        });
+
+        clearBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                getSharedPreferences("pref", 0).edit().putString(prefKeyList, "").apply();
+                currentList.setText("Allowed items:\n");
+            }
+        });
+
+        builder.setPositiveButton("Close", null);
+        builder.show();
     }
 
     @Override

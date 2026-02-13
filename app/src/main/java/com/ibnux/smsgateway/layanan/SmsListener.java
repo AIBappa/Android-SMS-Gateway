@@ -37,9 +37,65 @@ public class SmsListener extends BroadcastReceiver {
                 Log.i("SMS From", messageFrom);
                 Log.i("SMS Body", messageBody);
                 writeLog("SMS: RECEIVED : " + messageFrom + " " + messageBody,context);
+                
+                boolean passedFilters = true;
+                
+                // Filter Country Code
+                if(sp.getBoolean("filter_country_enabled", false)){
+                    boolean match = false;
+                    String countryList = sp.getString("filter_country_list", "");
+                    if(!countryList.isEmpty()){
+                        String[] codes = countryList.split(",");
+                        for(String code : codes){
+                            if(!code.trim().isEmpty() && messageFrom.startsWith(code.trim())){
+                                match = true;
+                                break;
+                            }
+                        }
+                    }
+                    if(!match) passedFilters = false;
+                }
+                
+                // Filter Prefix
+                if(passedFilters && sp.getBoolean("filter_prefix_enabled", false)){
+                    boolean match = false;
+                    String prefixList = sp.getString("filter_prefix_list", "");
+                    if(!prefixList.isEmpty()){
+                        String[] prefixes = prefixList.split(",");
+                        for(String prefix : prefixes){
+                            if(!prefix.trim().isEmpty() && messageBody.startsWith(prefix.trim())){
+                                match = true;
+                                break;
+                            }
+                        }
+                    }
+                    if(!match) passedFilters = false;
+                }
+                
+                // Filter Length
+                if(passedFilters && sp.getBoolean("filter_length_enabled", false)){
+                    boolean match = false;
+                    String lengthList = sp.getString("filter_length_list", "");
+                    if(!lengthList.isEmpty()){
+                        String[] lengths = lengthList.split(",");
+                        for(String len : lengths){
+                            try{
+                                if(!len.trim().isEmpty() && messageBody.length() == Integer.parseInt(len.trim())){
+                                    match = true;
+                                    break;
+                                }
+                            }catch(Exception e){}
+                        }
+                    }
+                    if(!match) passedFilters = false;
+                }
+
                 if(url!=null){
                     if(sp.getBoolean("gateway_on",true)) {
-                        sendPOST(url, messageFrom, messageBody,"received",context,messageTimestamp);
+                        if(passedFilters)
+                            sendPOST(url, messageFrom, messageBody,"received",context,messageTimestamp);
+                        else
+                            writeLog("SMS: FILTERED : " + messageFrom + " " + messageBody,context);
                     }else{
                         writeLog("GATEWAY OFF: SMS NOT POSTED TO SERVER", context);
                     }
