@@ -46,7 +46,7 @@
 
     <item
         android:id="@+id/menu_advanced_settings"
-        android:title="Security & Maintenance" />
+        android:title="Security &amp; Maintenance" />
 
     <item
         android:id="@+id/menu_system_status"
