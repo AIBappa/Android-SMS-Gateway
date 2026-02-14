@@ -53,7 +53,7 @@ public class SecurityUtil {
     public static void saveKey(Context context, String key) {
         SharedPreferences sp = context.getSharedPreferences("pref", 0);
         sp.edit().putString("shared_secret_key", key).apply();
-        GatewayLogger.log(context, "SECURITY", "NEW_KEY_SET: Key " + key + " was activated.");
+        GatewayLogger.log(context, "SECURITY", "NEW_KEY_SET: A new key was activated.");
     }
     
     public static String getSharedKey(Context context) {

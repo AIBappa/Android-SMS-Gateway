@@ -27,7 +27,11 @@ public class GatewayLogger {
     }
 
     private static synchronized void writeLog(Context context, String tag, String message) {
-        File logFile = new File(context.getFilesDir(), LOG_FILENAME);
+        File logDir = new File(context.getFilesDir(), "logs");
+        if (!logDir.exists()) {
+            logDir.mkdirs();
+        }
+        File logFile = new File(logDir, LOG_FILENAME);
         String timestamp = dateFormat.format(new Date());
         String entry = String.format("[%s] %s: %s\n", timestamp, tag, message);
 
@@ -42,7 +46,11 @@ public class GatewayLogger {
     }
 
     public static File getLogFile(Context context) {
-        return new File(context.getFilesDir(), LOG_FILENAME);
+        File logDir = new File(context.getFilesDir(), "logs");
+        if (!logDir.exists()) {
+            logDir.mkdirs();
+        }
+        return new File(logDir, LOG_FILENAME);
     }
     
     // Heartbeat method - should be called periodically

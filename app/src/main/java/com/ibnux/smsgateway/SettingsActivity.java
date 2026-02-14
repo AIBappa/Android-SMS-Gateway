@@ -192,8 +192,8 @@ public class SettingsActivity extends AppCompatActivity {
             long cutoffTime = System.currentTimeMillis() - (hours * 3600000L);
             
             int deletedCount = getContentResolver().delete(
-                    Uri.parse("content://sms/inbox"),
-                    "date < ?",
+                    Uri.parse("content://sms"),
+                    "date < ? AND type = 1",
                     new String[]{String.valueOf(cutoffTime)}
             );
             
