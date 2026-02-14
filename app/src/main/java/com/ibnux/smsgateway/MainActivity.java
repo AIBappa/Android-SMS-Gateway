@@ -461,30 +461,7 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
     }
 
-    BroadcastReceiver receiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            Fungsi.log("BroadcastReceiver received");
-            if(intent.hasExtra("newMessage"))
-                recyclerview.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        adapter.getNewData();
-                    }
-                });
-            else if(intent.hasExtra("newToken"))
-                updateInfo();
-            else if(intent.hasExtra("kill") && intent.getBooleanExtra("kill",false)){
-                Fungsi.log("BackgroundService KILLED");
-                serviceActive = false;
-            }else
-                serviceActive = true;
-
-        }
-    };
-}
-
-private void checkDefaultApp() {
+    private void checkDefaultApp() {
         if (!Fungsi.isDefaultSmsApp(this)) {
             new AlertDialog.Builder(this)
                     .setTitle("System Status: Warning")
@@ -507,3 +484,26 @@ private void checkDefaultApp() {
                     .show();
         }
     }
+
+    BroadcastReceiver receiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Fungsi.log("BroadcastReceiver received");
+            if(intent.hasExtra("newMessage"))
+                recyclerview.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        adapter.getNewData();
+                    }
+                });
+            else if(intent.hasExtra("newToken"))
+                updateInfo();
+            else if(intent.hasExtra("kill") && intent.getBooleanExtra("kill",false)){
+                Fungsi.log("BackgroundService KILLED");
+                serviceActive = false;
+            }else
+                serviceActive = true;
+
+        }
+    };
+}
