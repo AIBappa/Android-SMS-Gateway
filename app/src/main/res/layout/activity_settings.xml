@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Security Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Security Settings"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Shared Secret Key (Base64)" />
+
+        <TextView
+            android:id="@+id/tvSharedKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#E0E0E0"
+            android:padding="8dp"
+            android:text="No Key Set"
+            android:textIsSelectable="true"
+            android:typeface="monospace" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/btnGenerateKey"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Generate New Key"
+                android:textSize="12sp"/>
+
+            <Button
+                android:id="@+id/btnUseKey"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Use This Key"
+                android:textSize="12sp"/>
+        </LinearLayout>
+        
+        <Button
+            android:id="@+id/btnCopyKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Copy to Clipboard"/>
+
+        <!-- Backup Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Backup Configuration"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"/>
+
+        <EditText
+            android:id="@+id/etBackupUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="http://192.168.x.x:port/backup"
+            android:inputType="textUri" />
+
+        <Button
+            android:id="@+id/btnSaveBackupUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Save Backup URL"/>
+
+        <!-- Maintenance Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Maintenance: Batch-and-Purge"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"/>
+
+        <CheckBox
+            android:id="@+id/cbAutoDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Enable Auto-Deletion"/>
+
+        <LinearLayout
+            android:id="@+id/layoutAutoDelete"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Retention Hours" />
+
+            <EditText
+                android:id="@+id/etRetentionHours"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:hint="Hours (e.g. 24)" />
+
+            <Button
+                android:id="@+id/btnStartAutoDelete"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Start Auto-Deletion"
+                android:enabled="false"/>
+            
+            <TextView
+                android:id="@+id/tvDefaultAppWarning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="App must be Default Messaging App to delete SMS."
+                android:textColor="#FF0000"
+                android:visibility="gone"/>
+        </LinearLayout>
+
+        <!-- Logging Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Logging"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnViewLog"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="View Log"/>
+
+            <Button
+                android:id="@+id/btnShareLog"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Share Log"/>
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

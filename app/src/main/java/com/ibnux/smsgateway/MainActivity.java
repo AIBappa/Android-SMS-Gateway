@@ -332,6 +332,9 @@ public class MainActivity extends AppCompatActivity {
             case R.id.menu_filter_length:
                 showFilterDialog("Allowed Message Lengths", "filter_length_enabled", "filter_length_list", true);
                 return true;
+            case R.id.menu_advanced_settings:
+                startActivity(new Intent(this, SettingsActivity.class));
+                return true;
             case R.id.menu_system_status:
                 checkDefaultApp();
                 return true;

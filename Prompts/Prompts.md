@@ -9,6 +9,97 @@ The receiver_URL POST shall be encoded with AES-GCM. It shall be possible to set
 Prompt 3 (Yet to be given)
 I want another backup_URL in addition to the existing menu_set_url(I will also call this receiver_URL). The current filters for allowed country code(s), allowed prefix(s) and allowed length(s) will not be applicable for this backup URL. It should send all SMSes that were received to backup URL. Create a new backupsendservice.java for this in the layanan folder.
 
+Updates to prompt 2 + 3 + 6 (logging)
+Role: Systems Architect
+
+Objective: Implement a Bifurcated Data Engine with AES-GCM Encryption and Secure Key Management.
+
+1. Secure Key Management UI (Inside Settings):
+
+Field: "Shared Secret Key" (Non-editable).
+
+Button 1: "Generate New Key": Create a 256-bit key (Base64). Generating new key does not impact the log.
+
+Button 2: "Use This Key": * Activate the key and save to SharedPreferences.
+
+Log Event: Write to sms.gateway.log: [SECURITY] NEW_KEY_SET: Key [Base64] was activated.
+
+Button 3: "Copy to Clipboard": Copies the active key.
+
+2. The Dispatcher (The Splitter):
+
+Modify the SmsListener to split outbound data into two parallel, independent streams.
+
+Stream A (Primary): Apply filters (Country Code, Prefix, Length). If passed, encrypt the JSON payload using AES-GCM before POSTing to the receiver_URL.
+
+Use AES/GCM/NoPadding with a 128-bit or 256-bit key (derived from the "Shared Secret Key" in settings).
+
+For every message, generate a random 12-byte IV.
+
+The Envelope: To make decryption easy for the receiver, encode the output as a single Base64 string in this order: Base64(Byte_Array_of_IV + Byte_Array_of_Ciphertext + Byte_Array_of_Tag)
+
+Send this Base64 string in a JSON field named "payload".
+
+
+
+Stream B (Backup): No filters. Send raw, unencrypted JSON to the backup_URL.
+Implement BackupSendService.java in the layanan folder.
+It must handle standard JSON POSTs to local 192.168.x.x addresses.
+Manifest must allow android:usesCleartextTraffic="true" or include a Network Security Config for the local IP range
+
+Settings UI: Add a field for "Backup URL" (e.g., http://192.168.x.x:port).
+
+
+3. Maintenance: The "Batch-and-Purge"
+Settings UI: * Add a checkbox: "Enable Auto-Deletion".
+
+If checked, reveal an input field: "Retention Hours" (Integer) and "Start Auto-Deletion" button.
+
+The Logic:
+
+If "Start Auto-Deletion" is triggered (and validated), calculate the cutoff: System.currentTimeMillis() - (RetentionHours * 3,600,000).
+
+Delete all SMS in the inbox where the message date is older than the cutoff.
+
+Validation for Start Auto-Deletion: Button press only allowed if "Retention hours" > 0 and an Integer. If 0 is entered in this field, button should be greyed out. Only if integer value greater than 0 is entered (max value 3000), then Auto-Deletion button will be available.
+
+Note: Deletion of SMSes is only allowed if app is Default Messaging App. If This is not default messaging app, a message should be given to that effect to the user. User should then be instructed to setup the app as Default Messaging App via Settings. Note that to setup this app as Default App via the "Make Default Messaging App" button, it must include Manifest stubs for MmsReceiver, ComposeSmsActivity, and HeadlessSmsSendService to satisfy Android Default App requirements
+
+4. The Logger Utility (The Foundation):
+
+Create a thread-safe GatewayLogger writing to sms.gateway.log.
+
+Fail-Only Monitoring:
+
+Log [INTERRUPT] PRIMARY_FAIL: HTTP [Code] for Path A.
+
+Log [INTERRUPT] BACKUP_FAIL: HTTP [Code] for Path B.
+
+Heartbeat: Log [SYSTEM] Heartbeat: Logger Active every 24 hours.
+
+Also the logs from the shared key settings are captured here.
+
+In addition, the logs from auto-deleting old SMSes should also be stored here.
+
+Fail-Only Logging: Do not log successful posts. Log only if a POST to the Primary or Backup URL fails (capture the HTTP error code or Timeout exception).
+
+Audit Logging: Log when a Purge activity completes, stating how many messages were deleted.
+
+Settings impact: A view log and share log buttons must be provided in Logging section. View log should show the log. Share log should allow log to be shared using other apps (standard Android - email, whatsapp etc etc). Implement a FileProvider to securely share sms.gateway.log with external apps. To "Share" the log via WhatsApp/Email, the file sms.gateway.log must be stored in the app's Internal Private Storage.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Prompt 4 (Yet to be given)
 Android manifest for this app should request all SMS send, receive, create, update and delete permissions. This app should request permissions to become the default SMS messaging app.
 
@@ -31,7 +122,7 @@ Path B (Backup URL): Create a new BackupSendService.java in the layanan folder.
 
 Logic: This path ignores all filters. Every received SMS must be sent to this URL.
 
-Settings: Add a field for "Backup URL" (e.g., http://192.168.x.x:port).
+
 
 2. Permissions & Default Handler (Prompt 4)
 Manifest Update: Add SEND_SMS, RECEIVE_SMS, READ_SMS, WRITE_SMS, and INTERNET.
@@ -42,20 +133,7 @@ Implement a system request dialog (ACTION_CHANGE_DEFAULT) when the user initiali
 
 Mandatory Stubs: Create the required MmsReceiver and ComposeSmsActivity (can be empty stubs) to satisfy Android's requirements for a Default SMS App.
 
-3. Maintenance: The "Batch-and-Purge" (Prompt 5)
-Settings UI: * Add a checkbox: "Enable Auto-Deletion".
+ (Prompt 5)
 
-If checked, reveal an input field: "Retention Hours" (Integer).
 
-The Logic:
 
-If "Start Auto-Deletion" is triggered (and validated), calculate the cutoff: System.currentTimeMillis() - (RetentionHours * 3,600,000).
-
-Delete all SMS in the inbox where the message date is older than the cutoff.
-
-4. Unified Error Logging (The "Systems" Layer)
-Create a simple log file vlifecycle_gateway.log.
-
-Fail-Only Logging: Do not log successful posts. Log only if a POST to the Primary or Backup URL fails (capture the HTTP error code or Timeout exception).
-
-Audit Logging: Log when a Purge activity completes, stating how many messages were deleted.

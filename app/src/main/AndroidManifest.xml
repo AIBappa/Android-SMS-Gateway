@@ -45,6 +45,8 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".layanan.HeartbeatReceiver" />
+
         <service
             android:name=".layanan.BackgroundService"
             android:enabled="true"
@@ -96,6 +98,26 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:label="Settings"
+            android:parentActivityName=".MainActivity"/>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+        <service
+            android:name=".layanan.BackupSendService"
+            android:exported="false" />
+
+            
         <activity
             android:name=".MainActivity"
             android:launchMode="singleInstance">

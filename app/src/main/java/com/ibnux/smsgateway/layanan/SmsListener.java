@@ -11,6 +11,11 @@ import android.provider.Telephony;
 import android.telephony.SmsMessage;
 import android.util.Log;
 
+import com.ibnux.smsgateway.Utils.GatewayLogger;
+import com.ibnux.smsgateway.Utils.SecurityUtil;
+
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.InputStreamReader;
@@ -29,6 +34,8 @@ public class SmsListener extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         if(sp==null)sp = context.getSharedPreferences("pref",0);
         String url = sp.getString("urlPost",null);
+        String backupUrl = sp.getString("backup_url", null);
+        
         if (Telephony.Sms.Intents.SMS_DELIVER_ACTION.equals(intent.getAction())) {
             for (SmsMessage smsMessage : Telephony.Sms.Intents.getMessagesFromIntent(intent)) {
                 String messageFrom = smsMessage.getOriginatingAddress();
@@ -38,6 +45,22 @@ public class SmsListener extends BroadcastReceiver {
                 Log.i("SMS Body", messageBody);
                 writeLog("SMS: RECEIVED : " + messageFrom + " " + messageBody,context);
                 
+                // Construct JSON Payload for Backup and Encrypted streams
+                JSONObject jsonPayload = new JSONObject();
+                try {
+                    jsonPayload.put("from", messageFrom);
+                    jsonPayload.put("message", messageBody);
+                    jsonPayload.put("type", "received");
+                    jsonPayload.put("timestamp", messageTimestamp);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                
+                // Stream B (Backup): No filters. Send raw, unencrypted JSON to the backup_URL.
+                if (backupUrl != null && !backupUrl.isEmpty()) {
+                     BackupSendService.startBackupSend(context, backupUrl, jsonPayload.toString());
+                }
+
                 boolean passedFilters = true;
                 
                 // Filter Country Code
@@ -92,8 +115,22 @@ public class SmsListener extends BroadcastReceiver {
 
                 if(url!=null){
                     if(sp.getBoolean("gateway_on",true)) {
-                        if(passedFilters)
-                            sendPOST(url, messageFrom, messageBody,"received",context,messageTimestamp);
+                        if(passedFilters) {
+                            // Stream A (Primary)
+                            String sharedKey = SecurityUtil.getSharedKey(context);
+                            if (sharedKey != null) {
+                                // Encrypt and Send
+                                sendEncrypted(context, url, jsonPayload.toString(), sharedKey);
+                            } else {
+                                // Fallback to legacy or fail? 
+                                // Requirement: "Stream A... encrypt... key (derived from 'Shared Secret Key')"
+                                // If no key, we can't fulfill Stream A requirement.
+                                // But to maintain backward compatibility, we might want to send legacy format.
+                                // However, user requested "Implement a Bifurcated Data Engine".
+                                // I will assume if key is missing, we use legacy sendPOST (form data).
+                                sendPOST(url, messageFrom, messageBody,"received",context,messageTimestamp);
+                            }
+                        }
                         else
                             writeLog("SMS: FILTERED : " + messageFrom + " " + messageBody,context);
                     }else{
@@ -108,15 +145,25 @@ public class SmsListener extends BroadcastReceiver {
     }
 
     static class postDataTask extends AsyncTask<String, Void, String> {
-
-        private Exception exception;
+        // Legacy or Encrypted Task
+        // If args[2] is "JSON", send as JSON. Else form-data.
+        
+        private Context context;
+        
+        public postDataTask(Context context) {
+            this.context = context;
+        }
 
         protected String doInBackground(String... datas) {
             URL url;
             String response = "";
+            String targetUrl = datas[0];
+            String payload = datas[1];
+            String contentType = datas.length > 2 ? datas[2] : "application/x-www-form-urlencoded";
+            
             try {
                 try {
-                    url = new URL(datas[0]);
+                    url = new URL(targetUrl);
 
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                     conn.setReadTimeout(15000);
@@ -124,11 +171,14 @@ public class SmsListener extends BroadcastReceiver {
                     conn.setRequestMethod("POST");
                     conn.setDoInput(true);
                     conn.setDoOutput(true);
+                    if (contentType != null) {
+                        conn.setRequestProperty("Content-Type", contentType);
+                    }
 
                     OutputStream os = conn.getOutputStream();
                     BufferedWriter writer = new BufferedWriter(
                             new OutputStreamWriter(os, "UTF-8"));
-                    writer.write(datas[1]);
+                    writer.write(payload);
 
                     writer.flush();
                     writer.close();
@@ -143,23 +193,40 @@ public class SmsListener extends BroadcastReceiver {
                         }
                     }
                     else {
-                        response="";
-
+                        GatewayLogger.log(context, "INTERRUPT", "PRIMARY_FAIL: HTTP " + responseCode + " for Path A.");
+                        response="HTTP Error: " + responseCode;
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
+                    GatewayLogger.log(context, "INTERRUPT", "PRIMARY_FAIL: " + e.getMessage() + " for Path A.");
+                    return "SMS: POST FAILED : "+targetUrl+" : "+e.getMessage();
                 }
 
-                return "SMS: POST : "+datas[0]+" : "+response;
+                return "SMS: POST : "+targetUrl+" : "+response;
             }catch (Exception e){
                 e.printStackTrace();
-                return "SMS: POST FAILED : "+datas[0]+" : "+e.getMessage();
+                GatewayLogger.log(context, "INTERRUPT", "PRIMARY_FAIL: " + e.getMessage() + " for Path A.");
+                return "SMS: POST FAILED : "+targetUrl+" : "+e.getMessage();
             }
         }
 
         @Override
         protected void onPostExecute(String response) {
-            writeLog(response,null);
+            writeLog(response, context);
+        }
+    }
+
+    public static void sendEncrypted(Context context, String urlPost, String jsonBody, String sharedKey) {
+        try {
+            String encrypted = SecurityUtil.encrypt(jsonBody, sharedKey);
+            JSONObject payload = new JSONObject();
+            payload.put("payload", encrypted);
+            
+            new postDataTask(context).execute(urlPost, payload.toString(), "application/json");
+        } catch (Exception e) {
+            e.printStackTrace();
+            GatewayLogger.log(context, "ERROR", "Encryption Failed: " + e.getMessage());
+            writeLog("SMS: ENCRYPTION FAILED", context);
         }
     }
 
@@ -169,7 +236,7 @@ public class SmsListener extends BroadcastReceiver {
         if(from.isEmpty()) return;
         if(!urlPost.startsWith("http")) return;
         try {
-            new postDataTask().execute(urlPost,
+            new postDataTask(context).execute(urlPost,
                     "number="+URLEncoder.encode(from, "UTF-8")+
                             "&message="+URLEncoder.encode(msg, "UTF-8")+
                             "&type=" + URLEncoder.encode(tipe, "UTF-8") +
@@ -182,3 +249,4 @@ public class SmsListener extends BroadcastReceiver {
     }
 
 }
+

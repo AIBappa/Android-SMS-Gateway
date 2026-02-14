@@ -45,6 +45,10 @@
         android:title="Filter: Message Length" />
 
     <item
+        android:id="@+id/menu_advanced_settings"
+        android:title="Security & Maintenance" />
+
+    <item
         android:id="@+id/menu_system_status"
         android:title="System Status" />
 
