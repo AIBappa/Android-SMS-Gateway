@@ -44,4 +44,8 @@
         android:id="@+id/menu_filter_length"
         android:title="Filter: Message Length" />
 
+    <item
+        android:id="@+id/menu_system_status"
+        android:title="System Status" />
+
 </menu>

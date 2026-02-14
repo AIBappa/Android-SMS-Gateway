@@ -17,6 +17,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.provider.Telephony;
 import android.telephony.SmsManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -237,5 +238,19 @@ public class Fungsi {
         return simInfoList;
     }
 
+    public static boolean isDefaultSmsApp(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            String defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(context);
+            return defaultSmsPackage != null && defaultSmsPackage.equals(context.getPackageName());
+        }
+        return true; // Before KitKat, no default SMS app concept
+    }
 
+    public static void requestDefaultSmsApp(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            Intent intent = new Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT);
+            intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.getPackageName());
+            context.startActivity(intent);
+        }
+    }
 }

@@ -29,7 +29,7 @@ public class SmsListener extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         if(sp==null)sp = context.getSharedPreferences("pref",0);
         String url = sp.getString("urlPost",null);
-        if (Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(intent.getAction())) {
+        if (Telephony.Sms.Intents.SMS_DELIVER_ACTION.equals(intent.getAction())) {
             for (SmsMessage smsMessage : Telephony.Sms.Intents.getMessagesFromIntent(intent)) {
                 String messageFrom = smsMessage.getOriginatingAddress();
                 String messageBody = smsMessage.getMessageBody();

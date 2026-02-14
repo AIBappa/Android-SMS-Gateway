@@ -332,6 +332,9 @@ public class MainActivity extends AppCompatActivity {
             case R.id.menu_filter_length:
                 showFilterDialog("Allowed Message Lengths", "filter_length_enabled", "filter_length_list", true);
                 return true;
+            case R.id.menu_system_status:
+                checkDefaultApp();
+                return true;
         }
         return false;
     }
@@ -441,6 +444,15 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         LocalBroadcastManager.getInstance(this).registerReceiver(receiver,new IntentFilter("MainActivity"));
         super.onResume();
+        if(!Fungsi.isDefaultSmsApp(this)){
+            info.setText("WARNING: NOT DEFAULT SMS APP\nClick here for details");
+            info.setTextColor(getResources().getColor(android.R.color.holo_red_dark));
+            infoTxt = "WARNING: Permission Required!\n\nThis app must be set as the Default SMS App to function correctly.\n\n" + infoTxt;
+        } else {
+            info.setTextColor(getResources().getColor(android.R.color.black));
+            // Reset infoTxt prefix if needed, or rely on updateInfo()
+            updateInfo();
+        }
     }
 
     @Override
@@ -471,3 +483,27 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 }
+
+private void checkDefaultApp() {
+        if (!Fungsi.isDefaultSmsApp(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("System Status: Warning")
+                    .setMessage("This app is NOT the default SMS app. Permission is REQUIRED for full functionality.\n\nPlease set it as the default SMS app to ensure reliable operation.")
+                    .setPositiveButton("Set as Default", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            Fungsi.requestDefaultSmsApp(MainActivity.this);
+                        }
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .setIcon(android.R.drawable.ic_dialog_alert)
+                    .show();
+        } else {
+            new AlertDialog.Builder(this)
+                    .setTitle("System Status: OK")
+                    .setMessage("This app IS the default SMS app.\nAll permissions are set correctly.")
+                    .setPositiveButton("OK", null)
+                    .setIcon(android.R.drawable.ic_dialog_info)
+                    .show();
+        }
+    }
