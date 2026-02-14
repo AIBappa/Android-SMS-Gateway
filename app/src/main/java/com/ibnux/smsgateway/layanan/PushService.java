@@ -6,6 +6,7 @@ package com.ibnux.smsgateway.layanan;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -14,6 +15,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
@@ -36,7 +38,7 @@ import java.util.List;
 
 import io.objectbox.Box;
 
-public class PushService {
+public class PushService extends Service {
     private String TAG = "SMSin";
     private static Box<LogLine> logBox;
     private final static String simSlotName[] = {
@@ -57,6 +59,11 @@ public class PushService {
             "slotId",
             "slotIdx"
     };
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
 
     public static Context context;
 
