@@ -316,13 +316,4 @@ public class PushService {
         tellMainActivity();
     }
 
-    @Override
-    public void onNewToken(String s) {
-        Fungsi.log("onNewToken "+s);
-        getSharedPreferences("pref",0).edit().putString("token",s).apply();
-        Intent i = new Intent("MainActivity");
-        i.putExtra("newToken","newToken");
-        LocalBroadcastManager.getInstance(this).sendBroadcast(i);
-        super.onNewToken(s);
-    }
 }
