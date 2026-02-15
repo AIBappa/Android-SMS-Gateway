@@ -158,7 +158,7 @@ public class SettingsFragment extends Fragment {
         });
 
         // b, c, d) Filters
-        addButton("Filter: Country Codes", v -> showFilterDialog("Allowed Country Codes", "filter_country_enabled", "filter_country_list", false));
+        addButton("Filter: Country Codes", v -> showCountryFilterDialog());
         addButton("Filter: Message Prefix", v -> showFilterDialog("Allowed SMS Prefixes", "filter_prefix_enabled", "filter_prefix_list", false));
         addButton("Filter: Message Length", v -> showFilterDialog("Allowed Message Lengths", "filter_length_enabled", "filter_length_list", true));
 
@@ -342,13 +342,165 @@ public class SettingsFragment extends Fragment {
     }
     
     private void showFilterDialog(String title, String prefEnabled, String prefList, boolean isNumeric) {
-         // (Implementation adapted from MainActivity logic - Simplified for brevity)
-         // ... Dialog logic to edit filters
-         // This would duplicate the logic from MainActivity showFilterDialog
-         // For now, I'll log the action
-         logAction("Filter Dialog", "Opened " + title);
-         // You might want to copy the full dialog implementation here
+        Context ctx = requireContext();
+        AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
+        builder.setTitle(title);
+
+        LinearLayout layout = new LinearLayout(ctx);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 10);
+
+        // Checkbox
+        final CheckBox cbEnable = new CheckBox(ctx);
+        cbEnable.setText("Enable Filter");
+        cbEnable.setChecked(sp.getBoolean(prefEnabled, false));
+
+        // Input Field
+        final EditText etValues = new EditText(ctx);
+        etValues.setHint(isNumeric ? "Enter lengths (e.g. 5, 6)" : "Enter values (comma separated)");
+        etValues.setText(sp.getString(prefList, ""));
+        if (isNumeric) {
+            etValues.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_CLASS_TEXT);
+            etValues.setKeyListener(android.text.method.DigitsKeyListener.getInstance("0123456789,"));
+        }
+
+        layout.addView(cbEnable);
+        layout.addView(etValues);
+        builder.setView(layout);
+
+        // Buttons
+        builder.setPositiveButton("Save", null); // Set null to override later
+        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss());
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+        // Override Positive Button to handle validation
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            boolean enabled = cbEnable.isChecked();
+            String values = etValues.getText().toString().trim();
+
+            if (enabled && values.isEmpty()) {
+                etValues.setError("Value required when enabled");
+                Toast.makeText(ctx, "Please enter values or disable the filter.", Toast.LENGTH_LONG).show();
+            } else {
+                sp.edit()
+                        .putBoolean(prefEnabled, enabled)
+                        .putString(prefList, values)
+                        .apply();
+
+                logAction("Updated " + title, "Enabled: " + enabled + ", Values: " + values);
+                Toast.makeText(ctx, title + " Saved", Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            }
+        });
     }
+
+    private void showCountryFilterDialog() {
+        Context ctx = requireContext();
+        String[] countries = new String[COUNTRY_CODES.length];
+        boolean[] checkedItems = new boolean[COUNTRY_CODES.length];
+        String currentList = sp.getString("filter_country_list", "");
+
+        java.util.Set<String> currentSet = new java.util.HashSet<>();
+        if (!currentList.isEmpty()) {
+            String[] parts = currentList.split(",");
+            for (String part : parts) currentSet.add(part.trim());
+        }
+
+        for (int i = 0; i < COUNTRY_CODES.length; i++) {
+            countries[i] = COUNTRY_CODES[i][0] + " (+" + COUNTRY_CODES[i][1] + ")";
+            String code = COUNTRY_CODES[i][1];
+            if (currentSet.contains("+" + code) || currentSet.contains("00" + code)) {
+                checkedItems[i] = true;
+            }
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
+        builder.setTitle("Select Allowed Countries");
+        builder.setMultiChoiceItems(countries, checkedItems, (dialog, which, isChecked) -> {
+            checkedItems[which] = isChecked;
+        });
+
+        builder.setPositiveButton("Save", (dialog, which) -> {
+            StringBuilder sb = new StringBuilder();
+            boolean first = true;
+            for (int i = 0; i < COUNTRY_CODES.length; i++) {
+                if (checkedItems[i]) {
+                    if (!first) sb.append(",");
+                    sb.append("+").append(COUNTRY_CODES[i][1]).append(",");
+                    sb.append("00").append(COUNTRY_CODES[i][1]);
+                    first = false;
+                }
+            }
+            String result = sb.toString();
+            boolean enabled = !result.isEmpty();
+            sp.edit()
+                    .putBoolean("filter_country_enabled", enabled)
+                    .putString("filter_country_list", result)
+                    .apply();
+
+            logAction("Updated Allowed Countries", "Enabled: " + enabled + ", List: " + result);
+            Toast.makeText(ctx, "Allowed Countries Saved", Toast.LENGTH_SHORT).show();
+        });
+
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+
+    private static final String[][] COUNTRY_CODES = {
+            {"Afghanistan", "93"},
+            {"Albania", "355"},
+            {"Algeria", "213"},
+            {"Argentina", "54"},
+            {"Australia", "61"},
+            {"Austria", "43"},
+            {"Bangladesh", "880"},
+            {"Belgium", "32"},
+            {"Brazil", "55"},
+            {"Canada", "1"},
+            {"China", "86"},
+            {"Denmark", "45"},
+            {"Egypt", "20"},
+            {"Finland", "358"},
+            {"France", "33"},
+            {"Germany", "49"},
+            {"Greece", "30"},
+            {"Hong Kong", "852"},
+            {"India", "91"},
+            {"Indonesia", "62"},
+            {"Iran", "98"},
+            {"Iraq", "964"},
+            {"Ireland", "353"},
+            {"Israel", "972"},
+            {"Italy", "39"},
+            {"Japan", "81"},
+            {"Malaysia", "60"},
+            {"Mexico", "52"},
+            {"Netherlands", "31"},
+            {"New Zealand", "64"},
+            {"Norway", "47"},
+            {"Pakistan", "92"},
+            {"Philippines", "63"},
+            {"Poland", "48"},
+            {"Portugal", "351"},
+            {"Russia", "7"},
+            {"Saudi Arabia", "966"},
+            {"Singapore", "65"},
+            {"South Africa", "27"},
+            {"South Korea", "82"},
+            {"Spain", "34"},
+            {"Sweden", "46"},
+            {"Switzerland", "41"},
+            {"Taiwan", "886"},
+            {"Thailand", "66"},
+            {"Turkey", "90"},
+            {"Ukraine", "380"},
+            {"United Arab Emirates", "971"},
+            {"United Kingdom", "44"},
+            {"United States", "1"},
+            {"Vietnam", "84"}
+    };
 
     private void logAction(String action, String details) {
         ActionLog log = new ActionLog();
