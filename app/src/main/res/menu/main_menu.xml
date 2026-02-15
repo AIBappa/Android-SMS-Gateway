@@ -17,6 +17,10 @@
     <item
         android:id="@+id/menu_set_url"
         android:title="Set SMS receiver server" />
+    <item
+        android:id="@+id/menu_set_ussd_url"
+        android:title="Set USSD URL"
+        android:showAsAction="never" />
 
     <item
         android:id="@+id/menu_clear_logs"

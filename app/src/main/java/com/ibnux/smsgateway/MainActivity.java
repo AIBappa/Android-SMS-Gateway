@@ -271,6 +271,33 @@ public class MainActivity extends AppCompatActivity {
                         .setIcon(android.R.drawable.ic_dialog_alert)
                         .show();
                 return true;
+            case R.id.menu_set_ussd_url:
+                AlertDialog.Builder builderUssd = new AlertDialog.Builder(this);
+                builderUssd.setTitle("Change USSD URL");
+                builderUssd.setMessage("Data will send using POST with parameter number and message and type=ussd");
+                final EditText inputUssd = new EditText(this);
+                inputUssd.setText(getSharedPreferences("pref",0).getString("urlUssd",""));
+                inputUssd.setHint("https://sms.ibnux.net/ussd");
+                inputUssd.setMaxLines(1);
+                inputUssd.setInputType(InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT);
+                builderUssd.setView(inputUssd);
+                builderUssd.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        String urlUssd = inputUssd.getText().toString();
+                        getSharedPreferences("pref",0).edit().putString("urlUssd", urlUssd).commit();
+                        Toast.makeText(MainActivity.this,"USSD URL changed",Toast.LENGTH_LONG).show();
+                    }
+                });
+                builderUssd.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.cancel();
+                    }
+                });
+
+                builderUssd.show();
+                return true;
             case R.id.menu_set_url:
                 AlertDialog.Builder builder2 = new AlertDialog.Builder(this);
                 builder2.setTitle("Change URL for receiving SMS");
