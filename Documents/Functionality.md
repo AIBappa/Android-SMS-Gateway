@@ -1,88 +1,84 @@
-# Application Functionality Documentation
+# Application Functionality & Architecture
 
-UI Layout:
-This section explains the UI of this application
-## 1. Layout Split
-- **Description**: The layout is split with 2 tabs at the top.One tab is the live SMS Stream.Other tab is the Settings Tab that contains various settings.
+## Overview
+This Android SMS Gateway application acts as a bridge between SMS/USSD networks and HTTP webhooks. It allows incoming SMS to be forwarded to a server, and the server to send SMS/USSD via the device.
 
-## 2. Tab: Live SMS Stream
-- **Description**: It contains a master switch to toggle the application on/off. It also has a button below it to clear Live Stream. (This corresponds to the older Clear Logs button). Below this is a live stream SMS log searchbar. Below the searchbar is the actual live stream SMS log.
+## Core Components
 
-## 3. Tab: Settings (No hamburger menu or overflow menu button required)
-- **Description**: This contains 4 rectangular rounded buttons one below the other for different types of settings. Each button shows a menu when pressed. This menu can be closed with the close X, reverting back to showing all these 4 buttons. These menus are as follows:
+### 1. SMS Dispatcher & Gatekeeper
+*   **Sequential Queue**: Uses a `SingleThreadExecutor` (via `PostQueueManager`) to process HTTP POST requests sequentially (one-by-one) to prevent server overload or race conditions.
+*   **Gatekeeper**:
+    *   **Master Switch**: Global On/Off toggle on the Live Stream tab.
+    *   **Stream Toggles**: Individual enable/disable switches for Primary and Backup URL streams in Settings.
+    *   **Filters**: SMS can be filtered by Country Code, Prefix, or Length before processing (Primary Stream only).
+*   **Timeout**: User-configurable network timeout (seconds) applied to all HTTP requests.
 
-### 3.1 Menu: Push & USDD messaging
-- **Description**: This contains the following options.
-    a)View and change secret ID in a field. This is secret ID for server to app communication. The app does not accept IP requests unless this secret ID is provided.Change secret ID button when clicked changes the secret ID as noted above.
-    b) View device ID. This is the device ID allocated to mobile from server. Server could be Google Firebase or any other MQTT server communicating with the mobile. This cannot be set from the app.
-    c) USSD Test: This opens up  small dialog box that allows the USSD code to be filled in and sent for a short USSD test.
-    d) USSD Permission: This opens up the settings for requesting USSD permission.
-    e) Push USSD URL: The Push USSD  URL is where the app responds to (unencrypted) on getting a push request or USSD feedback.
-    f) View and Change expired: This controls the validity window for timestamped requests (default 3600s).
+### 2. Security & Encryption
+*   **AES-GCM Encryption**: Optional encryption for the Primary Stream.
+    *   If Enabled: Sends `{ "payload": "ENCRYPTED_DATA", "is_encrypted": true }`.
+    *   If Disabled: Sends raw JSON `{ ..., "is_encrypted": false }`.
+*   **Key Management**: Built-in Key Generator (256-bit Base64) with View/Copy/Save capabilities.
 
-### 3.2 Menu: SMS Webhook
-- **Description**: This contains the following options.
-    a) View and Edit Reciever URL: This is a URL field that shows reciever URL. Receiver URL allows to recieve the filtered and encrypted POST, when the right SMS is recieved. Clicking on this will allow editing the URL. Ok and cancel buttons to be provided when editing the URL or setting it for the first time.
-    b) Enable, view, Add, Clear all and Edit Allowed Country Code(s) filter for the SMSes to be forwarded to Receiver URL.
-    c) Enable, view, Add, Clear all and Edit Allowed Prefix(s) filter for the SMSes to be forwarded to Receiver URL.
-    d) Enable, view, Add, Clear all and Edit Allowed Message Length(s) filter for the SMSes to be forwarded to Receiver URL.
-    e) View , Generate , Set and Copy AES-GCM secret key. This contains a viewer to see the AES-GCM key, generate new key button to generate new key, set key button to set the key shown on the viewer and copy button to copy the key to clipboard.
-    f) View ,Edit and Save Backup URL: This shows the unfiltered and unencrypted Backup URL used to keep a record of all recieved SMSes.
+### 3. Bifurcated Data Streams
+The application implements a bifurcated data engine to handle SMS forwarding:
 
-### 3.3 Menu: Unified Log
-- **Description**: This contains the following options.
-    a) View Unified Log: This unified log keeps a record of various actions done by the user in Settings. This includes setting push secret key or setting webhook reciever_URL AES-GCM secret key. Also includes setting URLs (Push USSD, Reciever and Backup URLs) and any errors noted whilst communicating with these URLs. In addtion, any filters set for the Reciever_URL are also noted here. Auto-deletion actions are also recorded here.
-    b) Share Log: Share log button allows log to be shared via Email/ Whatsapp etc etc as per normal sharing methods on Android.
+*   **Stream A (Primary)**:
+    *   **Target**: `Receiver URL`.
+    *   **Purpose**: Secure, filtered transaction processing.
+    *   **Features**: Supports AES Encryption, Filters (Country/Prefix/Length).
+    *   **Logging**: Failures log to System Log; Successes log to Live Stream (RAM).
 
-### 3.4 Menu: System Settings
-- **Description**: This contains the following options.  
-    a) Set as Default Messaging App: This button on certain Android versions allows settings this app as default messaging app. A note should be provided here that it may not work with latest Android version. In this case, default messaging app should be set from Mobile settings menu.
-    b) Auto-Delete SMSes. This is the existing Maintenance:Batch and Purge option.This should have a checkbox for enabling auto-deletion, retention hours to save and start auto-deletion button. If auto-deletion is selected with checkbox and a positive integer value (from 1 to 3000) in retention hours, then auto-deletion button is avaialbe to be pressed. Once pressed and smses have been deleted that were recieved before the retention period, a message shall be shown to user. The checkbox shall be unticked and the retention hours field reset to have no value.
-    c) Disable or Enable Battery Optimization (Not sure if this functionality works in the app)
+*   **Stream B (Backup)**:
+    *   **Target**: `Backup URL`.
+    *   **Purpose**: Raw data archival / Catch-all.
+    *   **Features**: Sends raw, unencrypted JSON. Bypasses all filters.
+    *   **Logging**: Failures log to System Log; Successes log to Live Stream (RAM).
 
+### 4. Logging System
+The application maintains three distinct log types, accessible via the UI:
 
-Key Terms:
-This section explains the key functional components found in the application's menu and user interface.
+#### A. Live Stream (Main Page)
+*   **Storage**: **Volatile RAM-only** (`LiveLogBuffer`). Cleared on app restart.
+*   **Content**: Real-time view of **ALL** transactions (SMS Received, SMS Sent, HTTP Success/Fail, USSD actions).
+*   **Limits**: Self-truncating based on "Live Stream Max Entries" user setting (Default: 100).
+*   **UI**: Searchable list with "Clear Log" button.
 
-## 1. Change Secret
-- **Definition**: A unique identifier acting as an authentication token or password for the application instance.
-- **Allocation**:
-  - Automatically generated using `UUID.randomUUID()` when the application is first launched (in `Aplikasi.java`).
-  - Can be manually regenerated by the user via the "Change Secret" menu option.
-- **Usage**:
-  - Acts as a security token when the server sends commands (like "Send SMS") to the app. The server request must include this secret to be authorized.
-  - Displayed on the main screen so the user can copy it to their server configuration.
-- **Reset**:
-  - Via Menu > "Change Secret". This invalidates the old secret immediately.
+#### B. System Log (Settings -> Unified & System Logs)
+*   **Storage**: **Persistent Text File** (`sms.gateway.log`).
+*   **Content**: **Failures Only** (HTTP Errors, Timeouts, Send Failures) and critical system events (Heartbeats). Successful transactions are NOT logged here to save space and reduce noise.
+*   **UI**:
+    *   Paginated view (50 lines per page, newest first).
+    *   "Share File" button to export the full log file.
+    *   "Clear File" button to wipe the log.
 
-## 2. Device ID (Token)
-- **Definition**: The Firebase Cloud Messaging (FCM) Registration Token.
-- **Allocation**:
-  - Generated by Google's Firebase services when the app registers for push notifications.
-  - The app retrieves this token via `PushService` (implied, though code snippet context often shows token handling).
-- **Usage**:
-  - Uniquely identifies the specific Android device to Google's servers.
-  - Required by your backend server to target this specific phone when sending push notifications (to trigger SMS sending).
-  - Displayed on the main screen ("Your Device ID").
-- **Reset**:
-  - Refreshed automatically by the Firebase SDK if the token changes (e.g., app reinstall, data clear).
-  - The user can "Pull to refresh" on the main screen to attempt to retrieve/display the latest token.
+#### C. Audit Log (Settings -> Unified & System Logs)
+*   **Storage**: **Persistent Database** (`ActionLog` entity via ObjectBox).
+*   **Content**: User actions and configuration changes (e.g., "Changed Secret ID", "Generated New Key", "Auto-Delete Run", "Updated Receiver URL").
+*   **UI**:
+    *   Paginated view (50 entries per page).
+    *   "Share Page" button.
+    *   "Clear DB" button.
 
-## 3. Change Expired
-- **Definition**: A security timeout setting (in seconds) for validating timestamped server requests.
-- **Allocation**:
-  - Default value is **3600 seconds** (1 hour).
-  - User can customize this value via Menu > "Change expired".
-- **Usage**:
-  - When the server sends a request (like "Send SMS") using an MD5 signature (which includes a timestamp), the app checks if the request's timestamp is within this "Expired" window relative to the device's current time.
-  - If `Current Time - Request Time > Expired Value`, the request is rejected as too old (preventing replay attacks).
-- **Reset**:
-  - Manually set by the user through the menu dialog. Minimum value enforced is 5 seconds.
+## Maintenance Tools
+*   **Auto-Delete**: Deletes old SMS messages from the device inbox based on "Retention Hours". Can be run manually via "Start Auto-Delete".
+*   **Inbox Capacity**: Checks and displays the current number of messages in the inbox.
+*   **Battery Optimization**: Shortcut to disable battery optimization for reliable background operation.
 
-## Summary Table
+## UI Structure
 
-| Feature | Generated By | Modifiable by User? | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Secret** | App (UUID) | Yes (Regenerate) | Authenticate Server $\rightarrow$ App requests |
-| **Device ID** | Firebase (Google) | No (Read-only) | Address/Target device for Push Notifications |
-| **Expired** | App Default (3600s) | Yes (Edit Value) | Validation window for timestamped requests |
+### Tab 1: Live SMS Stream
+*   Master Toggle (Gateway On/Off).
+*   Clear Log Button.
+*   Search Bar.
+*   Live Log List (RAM-based).
+
+### Tab 2: Settings
+*   **Push & USSD Messaging**: Secret ID, Device ID, USSD Test/Permissions, Push URL.
+*   **SMS Webhook**:
+    *   **Security & Encryption**: Enable Encryption toggle, Key Management (Generate/View/Copy/Save).
+    *   **Dispatcher & Gatekeeper**: Network Timeout, Primary/Backup URL Toggles & Inputs.
+    *   **Filters**: Country Code, Prefix, Length.
+*   **Unified & System Logs**:
+    *   **Audit Log**: View user actions (Paginated), Share, Clear.
+    *   **System Log**: View failures (Paginated), Share File, Clear File.
+*   **System Settings**: Default App check, Inbox Maintenance (Auto-Delete, Capacity), Battery Optimization.

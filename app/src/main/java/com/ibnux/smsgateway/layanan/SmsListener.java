@@ -41,6 +41,7 @@ public class SmsListener extends BroadcastReceiver {
                 String messageTimestamp = smsMessage.getTimestampMillis()+"";
                 Log.i("SMS From", messageFrom);
                 Log.i("SMS Body", messageBody);
+                // RAM-only Log for Live Stream
                 writeLog("SMS: RECEIVED : " + messageFrom + " " + messageBody,context);
                 
                 // Construct Base JSON Payload

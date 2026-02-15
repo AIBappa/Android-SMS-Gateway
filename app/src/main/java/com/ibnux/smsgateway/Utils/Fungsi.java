@@ -88,12 +88,15 @@ public class Fungsi {
                 values.put("body", message);
                 Aplikasi.app.getContentResolver()
                         .insert(Uri.parse("content://sms/sent"), values);
+                // RAM Only
                 PushService.writeLog("SUBMIT SMS SUCCESS: " + number, cx);
             }
             catch (Exception ex)
             {
                 ex.printStackTrace();
+                // RAM + Persistent
                 PushService.writeLog("SEND FAILED: " + number + " " + message+"\n\n"+ex.getMessage(), cx);
+                GatewayLogger.log(cx, "ERROR", "SEND FAILED: " + number + " - " + ex.getMessage());
             }
         }
     }

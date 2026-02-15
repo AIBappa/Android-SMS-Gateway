@@ -42,6 +42,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
 
@@ -78,7 +80,7 @@ public class SettingsFragment extends Fragment {
 
         view.findViewById(R.id.btnMenuPushUssd).setOnClickListener(v -> openSubMenu("Push & USSD Messaging", 1));
         view.findViewById(R.id.btnMenuSmsWebhook).setOnClickListener(v -> openSubMenu("SMS Webhook", 2));
-        view.findViewById(R.id.btnMenuUnifiedLog).setOnClickListener(v -> openSubMenu("Unified Log", 3));
+        view.findViewById(R.id.btnMenuUnifiedLog).setOnClickListener(v -> openSubMenu("Unified & System Logs", 3));
         view.findViewById(R.id.btnMenuSystem).setOnClickListener(v -> openSubMenu("System Settings", 4));
     }
 
@@ -266,12 +268,160 @@ public class SettingsFragment extends Fragment {
         containerSubMenuContent.addView(filterSection);
     }
 
-    // --- 3.3 Unified Log ---
+    // --- 3.3 Unified & System Logs ---
+    private int auditOffset = 0;
+    private int systemLogOffset = 0;
+    private static final int PAGE_SIZE = 50;
+
     private void setupUnifiedLogMenu() {
         Context ctx = requireContext();
         
+        // --- Section 1: Audit Log (User Actions) ---
+        LinearLayout auditSection = createSection(ctx, "Audit Log (User Actions)");
+        
         TextView logView = new TextView(ctx);
-        List<ActionLog> logs = actionLogBox.query().orderDesc(ActionLog_.time).build().find(0, 50); // Last 50 actions
+        TextView auditPageIndicator = new TextView(ctx);
+        auditPageIndicator.setGravity(android.view.Gravity.CENTER);
+        
+        updateAuditLogView(logView, auditPageIndicator);
+        logView.setPadding(10, 10, 10, 10);
+        auditSection.addView(logView);
+        auditSection.addView(auditPageIndicator);
+
+        LinearLayout auditNavButtons = new LinearLayout(ctx);
+        auditNavButtons.setOrientation(LinearLayout.HORIZONTAL);
+        auditNavButtons.setGravity(android.view.Gravity.CENTER);
+        
+        Button btnPrevAudit = new Button(ctx);
+        btnPrevAudit.setText("< Newer");
+        btnPrevAudit.setOnClickListener(v -> {
+            if (auditOffset >= PAGE_SIZE) {
+                auditOffset -= PAGE_SIZE;
+                updateAuditLogView(logView, auditPageIndicator);
+            }
+        });
+        
+        Button btnNextAudit = new Button(ctx);
+        btnNextAudit.setText("Older >");
+        btnNextAudit.setOnClickListener(v -> {
+            // Check if there are more logs before advancing
+            if (actionLogBox.count() > auditOffset + PAGE_SIZE) {
+                auditOffset += PAGE_SIZE;
+                updateAuditLogView(logView, auditPageIndicator);
+            }
+        });
+        
+        auditNavButtons.addView(btnPrevAudit);
+        auditNavButtons.addView(btnNextAudit);
+        auditSection.addView(auditNavButtons);
+
+        LinearLayout auditActionButtons = new LinearLayout(ctx);
+        auditActionButtons.setOrientation(LinearLayout.HORIZONTAL);
+        
+        Button btnShareAudit = new Button(ctx);
+        btnShareAudit.setText("Share Page");
+        btnShareAudit.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("text/plain");
+            intent.putExtra(Intent.EXTRA_TEXT, logView.getText().toString());
+            startActivity(Intent.createChooser(intent, "Share Audit Log"));
+        });
+        
+        Button btnClearAudit = new Button(ctx);
+        btnClearAudit.setText("Clear DB");
+        btnClearAudit.setOnClickListener(v -> {
+            actionLogBox.removeAll();
+            auditOffset = 0;
+            updateAuditLogView(logView, auditPageIndicator);
+            Toast.makeText(ctx, "Audit Log Cleared", Toast.LENGTH_SHORT).show();
+        });
+
+        auditActionButtons.addView(btnShareAudit);
+        auditActionButtons.addView(btnClearAudit);
+        auditSection.addView(auditActionButtons);
+        
+        containerSubMenuContent.addView(auditSection);
+
+        // --- Section 2: System Log (Failures/Errors) ---
+        LinearLayout systemLogSection = createSection(ctx, "System Log (Failures Only)");
+        
+        TextView sysLogView = new TextView(ctx);
+        TextView sysPageIndicator = new TextView(ctx);
+        sysPageIndicator.setGravity(android.view.Gravity.CENTER);
+        
+        updateSystemLogView(ctx, sysLogView, sysPageIndicator);
+        sysLogView.setPadding(10, 10, 10, 10);
+        systemLogSection.addView(sysLogView);
+        systemLogSection.addView(sysPageIndicator);
+
+        LinearLayout sysNavButtons = new LinearLayout(ctx);
+        sysNavButtons.setOrientation(LinearLayout.HORIZONTAL);
+        sysNavButtons.setGravity(android.view.Gravity.CENTER);
+
+        Button btnPrevSys = new Button(ctx);
+        btnPrevSys.setText("< Newer");
+        btnPrevSys.setOnClickListener(v -> {
+            if (systemLogOffset >= PAGE_SIZE) {
+                systemLogOffset -= PAGE_SIZE;
+                updateSystemLogView(ctx, sysLogView, sysPageIndicator);
+            }
+        });
+        
+        Button btnNextSys = new Button(ctx);
+        btnNextSys.setText("Older >");
+        btnNextSys.setOnClickListener(v -> {
+            systemLogOffset += PAGE_SIZE;
+            updateSystemLogView(ctx, sysLogView, sysPageIndicator);
+        });
+        
+        sysNavButtons.addView(btnPrevSys);
+        sysNavButtons.addView(btnNextSys);
+        systemLogSection.addView(sysNavButtons);
+
+        LinearLayout sysActionButtons = new LinearLayout(ctx);
+        sysActionButtons.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button btnShareSys = new Button(ctx);
+        btnShareSys.setText("Share File");
+        btnShareSys.setOnClickListener(v -> {
+            try {
+                File logFile = GatewayLogger.getLogFile(ctx);
+                if(logFile.exists()) {
+                    Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".provider", logFile);
+                    Intent intent = new Intent(Intent.ACTION_SEND);
+                    intent.setType("text/plain");
+                    intent.putExtra(Intent.EXTRA_STREAM, uri);
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(intent, "Share System Log"));
+                } else {
+                    Toast.makeText(ctx, "Log file not found", Toast.LENGTH_SHORT).show();
+                }
+            } catch (Exception e) {
+                 Toast.makeText(ctx, "Error sharing file: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        Button btnClearSys = new Button(ctx);
+        btnClearSys.setText("Clear File");
+        btnClearSys.setOnClickListener(v -> {
+             File logFile = GatewayLogger.getLogFile(ctx);
+             if(logFile.exists()) {
+                 logFile.delete();
+                 systemLogOffset = 0;
+                 updateSystemLogView(ctx, sysLogView, sysPageIndicator);
+                 Toast.makeText(ctx, "System Log Cleared", Toast.LENGTH_SHORT).show();
+             }
+        });
+        
+        sysActionButtons.addView(btnShareSys);
+        sysActionButtons.addView(btnClearSys);
+        systemLogSection.addView(sysActionButtons);
+
+        containerSubMenuContent.addView(systemLogSection);
+    }
+
+    private void updateAuditLogView(TextView tv, TextView indicator) {
+        List<ActionLog> logs = actionLogBox.query().orderDesc(ActionLog_.time).build().find(auditOffset, PAGE_SIZE);
         StringBuilder sb = new StringBuilder();
         for(ActionLog log : logs) {
             sb.append("[").append(log.date).append("] ").append(log.action).append("\n");
@@ -279,19 +429,59 @@ public class SettingsFragment extends Fragment {
                 sb.append("   ").append(log.details).append("\n");
             sb.append("\n");
         }
-        if(logs.isEmpty()) sb.append("No actions recorded yet.");
+        if(logs.isEmpty()) sb.append(auditOffset == 0 ? "No actions recorded yet." : "End of logs.");
+        tv.setText(sb.toString());
         
-        logView.setText(sb.toString());
-        logView.setPadding(10, 10, 10, 10);
-        containerSubMenuContent.addView(logView);
+        long total = actionLogBox.count();
+        long end = Math.min(auditOffset + PAGE_SIZE, total);
+        indicator.setText("Showing " + (total > 0 ? auditOffset + 1 : 0) + "-" + end + " of " + total);
+    }
 
-        addButton("Share Log", v -> {
-            // Simple share implementation
-            Intent intent = new Intent(Intent.ACTION_SEND);
-            intent.setType("text/plain");
-            intent.putExtra(Intent.EXTRA_TEXT, sb.toString());
-            startActivity(Intent.createChooser(intent, "Share Action Log"));
-        });
+    private void updateSystemLogView(Context ctx, TextView tv, TextView indicator) {
+        File logFile = GatewayLogger.getLogFile(ctx);
+        StringBuilder sb = new StringBuilder();
+        int totalReadLines = 0;
+        
+        if(logFile.exists()) {
+            try {
+                // To paginate properly from "Newest", we read all lines into a list
+                // For performance, we limit reading to the last 1000 lines if the file is huge
+                // But simplified here: Read all, then sublist. 
+                // A better approach for huge files would be RandomAccessFile, but complex to implement here.
+                // Assuming log file is regularly cleared, simple list is fine.
+                
+                BufferedReader br = new BufferedReader(new FileReader(logFile));
+                String line;
+                LinkedList<String> allLines = new LinkedList<>();
+                while ((line = br.readLine()) != null) {
+                    allLines.add(line);
+                }
+                br.close();
+                
+                // Reverse to show newest first
+                Collections.reverse(allLines);
+                totalReadLines = allLines.size();
+                
+                int start = systemLogOffset;
+                int end = Math.min(start + PAGE_SIZE, totalReadLines);
+                
+                if (start < totalReadLines) {
+                    List<String> pageLines = allLines.subList(start, end);
+                    for(String s : pageLines) sb.append(s).append("\n");
+                } else {
+                    sb.append(start == 0 ? "Log file empty." : "End of logs.");
+                }
+                
+                indicator.setText("Showing " + (totalReadLines > 0 ? start + 1 : 0) + "-" + end + " of " + totalReadLines);
+
+            } catch (IOException e) {
+                sb.append("Error reading log file: ").append(e.getMessage());
+            }
+        } else {
+            sb.append("Log file empty or not found.");
+            indicator.setText("0-0 of 0");
+        }
+        tv.setText(sb.toString());
     }
 
     // --- 3.4 System Settings ---

@@ -28,6 +28,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.ibnux.smsgateway.Utils.Fungsi;
+import com.ibnux.smsgateway.data.LiveLogBuffer;
 import com.ibnux.smsgateway.data.LogAdapter;
 import com.ibnux.smsgateway.data.LogLine;
 import com.ibnux.smsgateway.data.PaginationListener;
