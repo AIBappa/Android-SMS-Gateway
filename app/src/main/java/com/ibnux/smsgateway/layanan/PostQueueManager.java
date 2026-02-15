@@ -2,16 +2,13 @@ package com.ibnux.smsgateway.layanan;
 
 import android.content.Context;
 import com.ibnux.smsgateway.Utils.GatewayLogger;
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import javax.net.ssl.HttpsURLConnection;
 
 public class PostQueueManager {
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -48,20 +45,12 @@ public class PostQueueManager {
             os.close();
             
             int responseCode = conn.getResponseCode();
-            String response = "";
 
-            if (responseCode == HttpsURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_CREATED || responseCode == HttpURLConnection.HTTP_ACCEPTED) {
-                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                String line;
-                while ((line = br.readLine()) != null) {
-                    response += line;
-                }
-                br.close();
-                
+            if (responseCode >= 200 && responseCode < 300) {
                 // Only log success if enabled
                 if (logSuccess) {
-                    GatewayLogger.log(context, "POST_SUCCESS", "URL: " + targetUrl + " | Resp: " + response);
-                    PushService.writeLog("SMS: POST : " + targetUrl + " : " + response, context);
+                    GatewayLogger.log(context, "POST_SUCCESS", "URL: " + targetUrl + " | Code: " + responseCode);
+                    PushService.writeLog("SMS: POST : " + targetUrl + " : Code " + responseCode, context);
                 }
             } else {
                 GatewayLogger.log(context, "POST_FAIL", "HTTP " + responseCode + " | URL: " + targetUrl);
