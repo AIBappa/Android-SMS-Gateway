@@ -248,6 +248,36 @@ public class SettingsFragment extends Fragment {
         autoDelLayout.addView(btnRun);
         containerSubMenuContent.addView(autoDelLayout);
 
+        Runnable updateButtonState = () -> {
+            boolean isChecked = cbAuto.isChecked();
+            boolean isValidInput = false;
+            try {
+                String text = etHours.getText().toString();
+                if(!text.isEmpty()) {
+                    int hours = Integer.parseInt(text);
+                    if (hours > 0) isValidInput = true;
+                }
+            } catch (NumberFormatException e) {
+                // Invalid number
+            }
+            btnRun.setEnabled(isChecked && isValidInput && Fungsi.isDefaultSmsApp(ctx));
+        };
+
+        cbAuto.setOnCheckedChangeListener((buttonView, isChecked) -> updateButtonState.run());
+
+        etHours.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                updateButtonState.run();
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {}
+        });
+
         // Logic
         btnRun.setOnClickListener(v -> {
             try {
