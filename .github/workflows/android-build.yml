@@ -2,9 +2,9 @@ name: Android CI Build
 
 on:
   push:
-    branches: [ Integration_Filter ]
+    branches: [ master, UI_Layout_Update ]
   pull_request:
-    branches: [ Integration_Filter ]
+    branches: [ master ]
 
 jobs:
   build:
