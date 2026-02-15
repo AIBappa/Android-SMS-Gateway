@@ -33,6 +33,7 @@ import com.ibnux.smsgateway.Utils.Fungsi;
 import com.ibnux.smsgateway.Utils.GatewayLogger;
 import com.ibnux.smsgateway.Utils.SecurityUtil;
 import com.ibnux.smsgateway.data.ActionLog;
+import com.ibnux.smsgateway.data.ActionLog_;
 import com.ibnux.smsgateway.layanan.PushService;
 import com.ibnux.smsgateway.layanan.UssdService;
 
@@ -281,7 +282,7 @@ public class SettingsFragment extends Fragment {
 
         TextView tv = new TextView(ctx);
         tv.setText(label);
-        tv.setTextStyle(android.graphics.Typeface.BOLD);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
 
         EditText et = new EditText(ctx);
         et.setText(value);
@@ -307,7 +308,7 @@ public class SettingsFragment extends Fragment {
 
         TextView tv = new TextView(ctx);
         tv.setText(label);
-        tv.setTextStyle(android.graphics.Typeface.BOLD);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
 
         TextView tvVal = new TextView(ctx);
         tvVal.setText(value);

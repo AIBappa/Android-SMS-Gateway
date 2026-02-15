@@ -60,7 +60,7 @@ public class LiveStreamFragment extends Fragment {
         btnClearLog = view.findViewById(R.id.btnClearLog);
 
         setupViews();
-        setupServiceCheck();
+        checkServices();
     }
 
     private void setupViews() {
