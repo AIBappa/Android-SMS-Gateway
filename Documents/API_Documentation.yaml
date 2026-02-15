@@ -77,36 +77,28 @@ paths:
     post:
       summary: Primary Receiver Endpoint (Stream A)
       description: |
-        Receives filtered SMS messages in an encrypted format.
+        Receives filtered SMS messages. The format depends on the "Enable Encryption" setting in the app.
         
         **Key Files:**
         - **Trigger (SMS)**: `app/src/main/java/com/ibnux/smsgateway/layanan/SmsListener.java` (Captures SMS, applies filters, initiates upload)
         - **Encryption**: `app/src/main/java/com/ibnux/smsgateway/Utils/SecurityUtil.java` (Encrypts payload using AES-GCM)
         
-        **Encryption Details:**
-        - Algorithm: AES/GCM/NoPadding
-        - Key: 256-bit Pre-Shared Key (configured in the app)
-        - Format: Base64(IV + CipherText + Tag)
-        - IV Length: 12 bytes
-        - Tag Length: 128 bits (16 bytes)
+        **Mode 1: Encryption Enabled (Default)**
+        - **Payload**: JSON Object with `is_encrypted: true` and a `payload` string.
+        - **Encryption Algorithm**: AES/GCM/NoPadding (256-bit Key).
+        - **Format**: Base64(IV + CipherText + Tag).
         
-        To decrypt:
-        1. Base64 decode the `payload` string.
-        2. Extract the first 12 bytes as the IV.
-        3. The remaining bytes are the Ciphertext + Tag.
-        4. Decrypt using the Pre-Shared Key and extracted IV.
-      operationId: receiveEncryptedSms
+        **Mode 2: Encryption Disabled**
+        - **Payload**: JSON Object with `is_encrypted: false` and raw message fields (`from`, `message`, etc.).
+      operationId: receivePrimarySms
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                payload:
-                  type: string
-                  description: Base64 encoded string containing the IV, Encrypted Data, and Authentication Tag.
-                  example: "VGhpcyBpcyBhbiBleGFtcGxlIGVuY3J5cHRlZCBwYXlsb2Fk..."
+              oneOf:
+                - $ref: '#/components/schemas/EncryptedPayload'
+                - $ref: '#/components/schemas/UnencryptedPayload'
       responses:
         '200':
           description: Message received successfully
@@ -184,6 +176,36 @@ paths:
 
 components:
   schemas:
+    EncryptedPayload:
+      type: object
+      properties:
+        is_encrypted:
+          type: boolean
+          example: true
+        payload:
+          type: string
+          description: Base64 encoded string containing IV + Encrypted Data + Tag.
+          example: "VGhpcyBpcyBhbiBleGFtcGxlIGVuY3J5cHRlZCBwYXlsb2Fk..."
+
+    UnencryptedPayload:
+      type: object
+      properties:
+        is_encrypted:
+          type: boolean
+          example: false
+        from:
+          type: string
+          example: "+1234567890"
+        message:
+          type: string
+          example: "Hello World"
+        type:
+          type: string
+          example: "received"
+        timestamp:
+          type: string
+          example: "1678886400000"
+
     SmsMessage:
       type: object
       required:
