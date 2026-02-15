@@ -30,6 +30,7 @@ import com.ibnux.smsgateway.ObjectBox;
 import com.ibnux.smsgateway.Utils.Fungsi;
 import com.ibnux.smsgateway.Utils.SimUtil;
 import com.ibnux.smsgateway.data.LogLine;
+import com.ibnux.smsgateway.data.LogLine_;
 import com.ibnux.smsgateway.data.UssdData;
 
 import java.util.ArrayList;
@@ -312,6 +313,23 @@ public class PushService extends Service {
         if(logBox==null){
             logBox = ObjectBox.get().boxFor(LogLine.class);
         }
+        
+        // Self-truncating logic
+        try {
+            SharedPreferences sp = cx.getSharedPreferences("pref", 0);
+            int maxEntries = sp.getInt("live_stream_max", 100);
+            long count = logBox.count();
+            if (count >= maxEntries) {
+                long excess = count - maxEntries + 1;
+                if (excess > 0) {
+                     List<LogLine> oldLogs = logBox.query().order(LogLine_.time).build().find(0, excess);
+                     logBox.remove(oldLogs);
+                }
+            }
+        } catch (Exception e) {
+            // Ignore errors in truncation
+        }
+
         LogLine ll = new LogLine();
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(System.currentTimeMillis());

@@ -151,40 +151,119 @@ public class SettingsFragment extends Fragment {
     private void setupSmsWebhookMenu() {
         Context ctx = requireContext();
 
-        // a) Receiver URL
-        addEditableField("Receiver URL", sp.getString("urlPost", ""), value -> {
+        // --- Section 1: Security & Encryption ---
+        LinearLayout securitySection = createSection(ctx, "Security & Encryption");
+        
+        // Toggle: Enable Encryption
+        Switch swEncryption = new Switch(ctx);
+        swEncryption.setText("Enable Encryption (AES-GCM)");
+        swEncryption.setChecked(sp.getBoolean("enable_encryption", false));
+        swEncryption.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_encryption", isChecked).apply();
+            logAction("Encryption Toggle", "Set to " + isChecked);
+        });
+        securitySection.addView(swEncryption);
+
+        // Key Management
+        String currentKey = SecurityUtil.getSharedKey(ctx);
+        EditText etKey = new EditText(ctx);
+        etKey.setHint("AES Key (Base64)");
+        etKey.setText(currentKey != null ? currentKey : "");
+        securitySection.addView(etKey);
+
+        LinearLayout keyButtons = new LinearLayout(ctx);
+        keyButtons.setOrientation(LinearLayout.HORIZONTAL);
+        
+        Button btnGenKey = new Button(ctx);
+        btnGenKey.setText("Generate New Key");
+        btnGenKey.setOnClickListener(v -> {
+            String newKey = SecurityUtil.generateNewKey();
+            etKey.setText(newKey);
+            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
+        });
+        
+        Button btnSaveKey = new Button(ctx);
+        btnSaveKey.setText("Use This Key");
+        btnSaveKey.setOnClickListener(v -> {
+            String key = etKey.getText().toString();
+            if(!key.isEmpty()) {
+                SecurityUtil.saveKey(ctx, key);
+                logAction("Updated AES Key", "New key saved");
+                Toast.makeText(ctx, "Key Saved", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        keyButtons.addView(btnGenKey);
+        keyButtons.addView(btnSaveKey);
+        securitySection.addView(keyButtons);
+
+        // Clipboard
+        Button btnCopyKey = new Button(ctx);
+        btnCopyKey.setText("Copy Active Key");
+        btnCopyKey.setOnClickListener(v -> {
+            String activeKey = SecurityUtil.getSharedKey(ctx);
+            if(activeKey != null) {
+                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("AES Key", activeKey);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
+            }
+        });
+        securitySection.addView(btnCopyKey);
+        
+        containerSubMenuContent.addView(securitySection);
+
+        // --- Section 2: Sequential Dispatcher & Gatekeeper ---
+        LinearLayout dispatchSection = createSection(ctx, "Dispatcher & Gatekeeper");
+
+        // Timeout
+        addEditableFieldToLayout(dispatchSection, "Network Timeout (Seconds)", String.valueOf(sp.getInt("network_timeout", 15)), value -> {
+            try {
+                int timeout = Integer.parseInt(value);
+                if(timeout < 1) timeout = 1;
+                sp.edit().putInt("network_timeout", timeout).commit();
+                logAction("Updated Timeout", "New value: " + timeout);
+            } catch (Exception e) {}
+        });
+
+        // Primary URL
+        Switch swPrimary = new Switch(ctx);
+        swPrimary.setText("Enable Primary URL");
+        swPrimary.setChecked(sp.getBoolean("enable_stream_a", true));
+        swPrimary.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_stream_a", isChecked).apply();
+        });
+        dispatchSection.addView(swPrimary);
+
+        addEditableFieldToLayout(dispatchSection, "Receiver URL (Primary)", sp.getString("urlPost", ""), value -> {
             sp.edit().putString("urlPost", value).commit();
             logAction("Updated Receiver URL", value);
         });
 
-        // b, c, d) Filters
-        addButton("Filter: Country Codes", v -> showCountryFilterDialog());
-        addButton("Filter: Message Prefix", v -> showFilterDialog("Allowed SMS Prefixes", "filter_prefix_enabled", "filter_prefix_list", false));
-        addButton("Filter: Message Length", v -> showFilterDialog("Allowed Message Lengths", "filter_length_enabled", "filter_length_list", true));
-
-        // e) AES-GCM Key
-        String currentKey = SecurityUtil.getSharedKey(ctx);
-        addReadOnlyField("AES-GCM Key", currentKey != null ? currentKey : "Not Set");
-        addButton("Generate New AES Key", v -> {
-            String newKey = SecurityUtil.generateNewKey();
-            SecurityUtil.saveKey(ctx, newKey);
-            logAction("Generated AES Key", "New key generated and saved");
-            setupSmsWebhookMenu(); // Refresh
+        // Backup URL
+        Switch swBackup = new Switch(ctx);
+        swBackup.setText("Enable Backup URL");
+        swBackup.setChecked(sp.getBoolean("enable_stream_b", false));
+        swBackup.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_stream_b", isChecked).apply();
         });
-        addButton("Copy AES Key", v -> {
-            if(currentKey != null) {
-                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("AES Key", currentKey);
-                clipboard.setPrimaryClip(clip);
-                Toast.makeText(ctx, "Copied", Toast.LENGTH_SHORT).show();
-            }
-        });
+        dispatchSection.addView(swBackup);
 
-        // f) Backup URL
-        addEditableField("Backup URL", sp.getString("backup_url", ""), value -> {
+        addEditableFieldToLayout(dispatchSection, "Backup URL", sp.getString("backup_url", ""), value -> {
             sp.edit().putString("backup_url", value).commit();
             logAction("Updated Backup URL", value);
         });
+
+        containerSubMenuContent.addView(dispatchSection);
+
+        // Filters (Legacy)
+        LinearLayout filterSection = createSection(ctx, "Filters");
+        addButtonToLayout(filterSection, "Filter: Country Codes", v -> showCountryFilterDialog());
+        addButtonToLayout(filterSection, "Filter: Message Prefix", v -> showFilterDialog("Allowed SMS Prefixes", "filter_prefix_enabled", "filter_prefix_list", false));
+        addButtonToLayout(filterSection, "Filter: Message Length", v -> showFilterDialog("Allowed Message Lengths", "filter_length_enabled", "filter_length_list", true));
+        containerSubMenuContent.addView(filterSection);
     }
 
     // --- 3.3 Unified Log ---
@@ -225,77 +304,94 @@ public class SettingsFragment extends Fragment {
         if(!isDefault) {
             addButton("Set as Default App", v -> Fungsi.requestDefaultSmsApp(ctx));
         }
+        
+        // --- Section 3: Maintenance & Storage ---
+        LinearLayout maintSection = createSection(ctx, "Inbox Maintenance");
 
-        // b) Auto-Delete
-        // Logic migrated from SettingsActivity
-        LinearLayout autoDelLayout = new LinearLayout(ctx);
-        autoDelLayout.setOrientation(LinearLayout.VERTICAL);
-        autoDelLayout.setPadding(10, 20, 10, 20);
-
+        // Auto-Delete
         CheckBox cbAuto = new CheckBox(ctx);
         cbAuto.setText("Enable Auto-Delete");
+        cbAuto.setChecked(sp.getBoolean("auto_delete_enabled", false));
+        cbAuto.setOnCheckedChangeListener((v, isChecked) -> sp.edit().putBoolean("auto_delete_enabled", isChecked).apply());
         
         EditText etHours = new EditText(ctx);
         etHours.setHint("Retention Hours (1-3000)");
         etHours.setInputType(InputType.TYPE_CLASS_NUMBER);
+        etHours.setText(sp.getString("auto_delete_hours", ""));
+        
+        Button btnSaveAuto = new Button(ctx);
+        btnSaveAuto.setText("Save Settings");
+        btnSaveAuto.setOnClickListener(v -> {
+            sp.edit().putString("auto_delete_hours", etHours.getText().toString()).apply();
+            Toast.makeText(ctx, "Settings Saved", Toast.LENGTH_SHORT).show();
+        });
         
         Button btnRun = new Button(ctx);
-        btnRun.setText("Run Auto-Delete Now");
-        btnRun.setEnabled(false);
-
-        autoDelLayout.addView(cbAuto);
-        autoDelLayout.addView(etHours);
-        autoDelLayout.addView(btnRun);
-        containerSubMenuContent.addView(autoDelLayout);
-
-        Runnable updateButtonState = () -> {
-            boolean isChecked = cbAuto.isChecked();
-            boolean isValidInput = false;
-            try {
-                String text = etHours.getText().toString();
-                if(!text.isEmpty()) {
-                    int hours = Integer.parseInt(text);
-                    if (hours > 0) isValidInput = true;
-                }
-            } catch (NumberFormatException e) {
-                // Invalid number
-            }
-            btnRun.setEnabled(isChecked && isValidInput && Fungsi.isDefaultSmsApp(ctx));
-        };
-
-        cbAuto.setOnCheckedChangeListener((buttonView, isChecked) -> updateButtonState.run());
-
-        etHours.addTextChangedListener(new android.text.TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                updateButtonState.run();
-            }
-
-            @Override
-            public void afterTextChanged(android.text.Editable s) {}
-        });
-
-        // Logic
+        btnRun.setText("Start Auto-Delete");
         btnRun.setOnClickListener(v -> {
             try {
-                int hours = Integer.parseInt(etHours.getText().toString());
+                String hStr = etHours.getText().toString();
+                if(hStr.isEmpty()) hStr = sp.getString("auto_delete_hours", "24");
+                
+                int hours = Integer.parseInt(hStr);
                 long cutoffTime = System.currentTimeMillis() - (hours * 3600000L);
                 int deletedCount = ctx.getContentResolver().delete(
                         Uri.parse("content://sms"),
-                        "date < ? AND type = 1",
+                        "date < ?",
                         new String[]{String.valueOf(cutoffTime)}
                 );
                 logAction("Auto-Delete Run", "Deleted " + deletedCount + " messages > " + hours + "h old");
                 Toast.makeText(ctx, "Deleted " + deletedCount + " messages", Toast.LENGTH_LONG).show();
-                cbAuto.setChecked(false);
-                etHours.setText("");
             } catch (Exception e) {
                 Toast.makeText(ctx, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
+
+        maintSection.addView(cbAuto);
+        maintSection.addView(etHours);
+        maintSection.addView(btnSaveAuto);
+        maintSection.addView(btnRun);
+
+        // Inbox Capacity
+        Button btnCapacity = new Button(ctx);
+        btnCapacity.setText("Check Inbox Capacity");
+        btnCapacity.setOnClickListener(v -> {
+            try {
+                android.database.Cursor c = ctx.getContentResolver().query(Uri.parse("content://sms/inbox"), null, null, null, null);
+                int count = 0;
+                if(c != null) {
+                    count = c.getCount();
+                    c.close();
+                }
+                String msg = "Total Inbox: " + count + " messages";
+                GatewayLogger.log(ctx, "AUDIT", msg);
+                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                Toast.makeText(ctx, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+        maintSection.addView(btnCapacity);
+        
+        containerSubMenuContent.addView(maintSection);
+
+        // --- Section 4: Logging & Live Stream ---
+        LinearLayout loggingSection = createSection(ctx, "Logging & Stream");
+        
+        addEditableFieldToLayout(loggingSection, "Live Stream Max Entries", String.valueOf(sp.getInt("live_stream_max", 100)), value -> {
+            try {
+                int max = Integer.parseInt(value);
+                if(max < 10) max = 10;
+                sp.edit().putInt("live_stream_max", max).commit();
+            } catch (Exception e) {}
+        });
+        
+        Switch swLogSuccess = new Switch(ctx);
+        swLogSuccess.setText("Log Successful POSTs");
+        swLogSuccess.setChecked(sp.getBoolean("log_post_success", false));
+        swLogSuccess.setOnCheckedChangeListener((v, isChecked) -> sp.edit().putBoolean("log_post_success", isChecked).apply());
+        loggingSection.addView(swLogSuccess);
+        
+        containerSubMenuContent.addView(loggingSection);
 
         // c) Battery
         addButton("Disable Battery Optimization", v -> {
@@ -548,5 +644,55 @@ public class SettingsFragment extends Fragment {
 
     interface OnSaveListener {
         void onSave(String value);
+    }
+
+    // Helpers
+    private LinearLayout createSection(Context ctx, String title) {
+        LinearLayout section = new LinearLayout(ctx);
+        section.setOrientation(LinearLayout.VERTICAL);
+        section.setBackgroundResource(R.drawable.border_background);
+        section.setPadding(20, 20, 20, 20);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 20, 0, 20);
+        section.setLayoutParams(params);
+
+        if (title != null) {
+            TextView tvTitle = new TextView(ctx);
+            tvTitle.setText(title);
+            tvTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+            tvTitle.setTextSize(18);
+            tvTitle.setPadding(0, 0, 0, 20);
+            section.addView(tvTitle);
+        }
+        return section;
+    }
+    
+    private void addEditableFieldToLayout(LinearLayout parent, String label, String value, OnSaveListener listener) {
+        Context ctx = requireContext();
+        TextView tv = new TextView(ctx);
+        tv.setText(label);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+
+        EditText et = new EditText(ctx);
+        et.setText(value);
+
+        Button btn = new Button(ctx);
+        btn.setText("Save " + label);
+        btn.setOnClickListener(v -> {
+            listener.onSave(et.getText().toString());
+            Toast.makeText(ctx, "Saved", Toast.LENGTH_SHORT).show();
+        });
+
+        parent.addView(tv);
+        parent.addView(et);
+        parent.addView(btn);
+    }
+    
+    private void addButtonToLayout(LinearLayout parent, String label, View.OnClickListener listener) {
+        Button btn = new Button(requireContext());
+        btn.setText(label);
+        btn.setOnClickListener(listener);
+        parent.addView(btn);
     }
 }
