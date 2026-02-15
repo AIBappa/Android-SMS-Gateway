@@ -88,7 +88,7 @@ public class LiveStreamFragment extends Fragment {
         btnClearLog.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                ObjectBox.get().boxFor(LogLine.class).removeAll();
+                LiveLogBuffer.clear();
                 adapter.reload();
             }
         });
