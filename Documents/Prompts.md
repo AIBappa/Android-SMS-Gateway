@@ -137,3 +137,112 @@ Mandatory Stubs: Create the required MmsReceiver and ComposeSmsActivity (can be 
 
 
 
+Updates required (15/02/2025)
+1) Encryption enabled/disabled toggle- If encryption enabled via toggle switch AES-GCM key will be used, else data will be passed without encryption. YAML file will need an update.
+2) All URLs have a timeout, if immediate response is not recieved, they will wait until timeout period to send the next message in sequence.
+3) All URLs need to have an enable functionality, this is a toggle to enable this functionality.
+4) Sequential dispatcher and burst protection as below.
+5) Live SMS stream should be completely in memory and not be written to mobile. The maximum shown transactions on live SMS stream should be dictated by a non-zero integer value in system settings menu.
+6) Menus should have border boxes for functionality that is grouped together. This is a feature only for good-looking purposes.
+7) With the auto-deletion feature also provide a button to list the number of existing inbox SMS messages. Results of this button press should be logged.
+
+
+Sequential Dispatcher & Burst Protection (Add to Section 2)
+Sequential Processing Requirement:
+To prevent network congestion, memory exhaustion, and out-of-order delivery during high-volume SMS bursts, the Dispatcher must implement a Producer-Consumer pattern:
+
+The Queue: Use a single-threaded background worker (e.g., SingleThreadExecutor or a serialized IntentService). Incoming SMS events must be queued and processed strictly one at a time in the order they are received.
+
+Blocking Handshake: The dispatcher must wait for the current POST request (to both Primary and Backup streams) to either complete or hit a timeout before picking up the next message from the queue.
+
+Memory Safety: The queue must exist only in RAM as a list of volatile objects. Do not persist the queue to a database. Once a message is successfully dispatched or logged as a failure, it should be removed from memory.
+
+UI Synchronization: As the worker processes the queue, update the existing Live Feed UI to show current progress (e.g., "Processing 4 of 100"). Use runOnUiThread to ensure the UI remains responsive and does not "jitter" during high-frequency bursts.
+
+Systems Architect's Final Review
+By adding this, you change the behavior of the app under stress:
+
+Without this: If 100 SMS arrive, the phone tries to open 200 sockets (100 Primary + 100 Backup) at once. This is the #1 cause of "App Not Responding" (ANR) crashes on older Android 7.1.1 hardware.
+
+With this: The app remains calm. It handles SMS 1, sends it, then handles SMS 2. To the user, the Live Feed will look like a steady, professional ticker tape rather than a chaotic flash of data.
+
+One Implementation Detail to Watch:
+When the AI writes this, make sure it handles the Timeout correctly. If the Primary URL (Supabase) hangs for 30 seconds, you don't want the whole queue to stop forever. Ensure the prompt implies: "Each task in the queue must have a defined timeout (e.g., 10 seconds) so the worker can move to the next message if a server is unresponsive."
+
+Section 2: The Sequential Dispatcher & Gatekeeper Logic
+1. Gatekeeper Logic (Pre-Execution):
+
+Before processing any incoming SMS, the app must check the following conditions. If any are true, the app should abort processing and do nothing:
+
+The "Master Enable" switch on the app's front page is OFF.
+
+Both the receiver_URL and backup_URL are empty/null in settings.
+
+2. Sequential Queueing (The Pipeline):
+
+Use a SingleThreadExecutor to manage a serialized background queue. This ensures messages are processed strictly one at a time in the order of receipt, even during high-volume bursts.
+
+Blocking Handshake: The worker must wait for the current dispatch to finish before picking up the next task.
+
+3. Configurable Network Timeout:
+
+Add a setting field for "Network Timeout (Seconds)" (Integer, default 10).
+
+Apply this timeout to both the Primary (Encrypted) and Backup (Raw) HTTP POST requests.
+
+If a request hits this timeout, log the failure as [INTERRUPT] TIMEOUT_EXCEEDED in sms.gateway.log and move to the next message in the queue.
+
+4. Memory Safety:
+
+All queued messages must exist in RAM only. Once a message is processed (sent or timed out), it must be cleared from the queue to prevent memory leaks.
+
+Systems-Level Audit
+Battery Efficiency: By checking the "Master Switch" and URL fields first, you prevent the phone from waking up the CPU and radio unnecessarily. This is vital for maintaining battery health on an older Android 7.1.1 device.
+
+Resiliency: The configurable timeout prevents the entire queue from being blocked by a single "hung" server connection.
+
+UI Feedback: Your Live Feed should still show when the app is "Idle" or "Disabled," so you have visual confirmation of why nothing is being forwarded.
+
+The "Onboarding" Test Case
+When you test your ONBOARD:HASH handshake, you can now simulate a failure by setting the timeout to 1 second and seeing if the logger correctly captures the TIMEOUT_EXCEEDED event. This gives you a safe way to test your error-handling logic.
+
+
+
+=====================================================================================
+The Final Finalized Master Prompt (Integrated)
+Section 1: Secure Key & Encryption UI in SMS Webhook Menu
+
+Toggle: "Enable Encryption".
+
+Keygen: "Generate New Key" (256-bit Base64) + "Use This Key" (Saves to Prefs & Logs). An issue is noted here - Generate New Key when pressed is creating an entire new section of key + reciever URL +Backup URL ie everything in the SMS Webhook Menu copy pasted below original. 
+
+Clipboard: "Copy Active Key" button.
+
+Visual: Group these inside a border box labeled "Security & Encryption".
+
+Section 2: Sequential Dispatcher & Gatekeeper
+
+Master Enable: Main UI toggle. If OFF, do nothing. This feature is already present on UI.
+
+Toggles: Individual "Enable" switches for Primary and Backup URLs.
+
+Timeout: User-configurable "Network Timeout" (Seconds) applied to all POSTs.
+
+Sequential Queue: Producer-Consumer logic using a SingleThreadExecutor. Process bursts one-by-one.
+
+Encryption Logic: If Toggle is ON, send AES-GCM envelope + "is_encrypted": true. If OFF, send raw JSON + "is_encrypted": false.
+
+Section 3: Maintenance & Storage in System Settings Menu
+
+Auto-Delete: "Retention Hours" (1-3000) + "Enable Auto-Deletion" checkbox + "Start" button.
+
+Inbox Info: Button "Check Inbox Capacity" -> Returns total SMS count + logs result in sms.gateway.log.
+
+Visual: Group these inside a border box labeled "Inbox Maintenance".
+
+Section 4: Logging & Live Stream
+
+Live Stream: Volatile RAM-only feed. This is already implemented on main page. If not implemented already need a max entries for this live feed . This is a User Setting (Integer) in System Settings Menu. It allows for Self-truncating behavior on the live stream.
+
+System Log: sms.gateway.log (Fail-only and enabled/disabled for POSTs, Audit for Keys/Purge).
+

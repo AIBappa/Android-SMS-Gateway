@@ -33,8 +33,6 @@ public class SmsListener extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         if(sp==null)sp = context.getSharedPreferences("pref",0);
-        String url = sp.getString("urlPost",null);
-        String backupUrl = sp.getString("backup_url", null);
         
         if (Telephony.Sms.Intents.SMS_DELIVER_ACTION.equals(intent.getAction())) {
             for (SmsMessage smsMessage : Telephony.Sms.Intents.getMessagesFromIntent(intent)) {
@@ -43,9 +41,10 @@ public class SmsListener extends BroadcastReceiver {
                 String messageTimestamp = smsMessage.getTimestampMillis()+"";
                 Log.i("SMS From", messageFrom);
                 Log.i("SMS Body", messageBody);
+                // RAM-only Log for Live Stream
                 writeLog("SMS: RECEIVED : " + messageFrom + " " + messageBody,context);
                 
-                // Construct JSON Payload for Backup and Encrypted streams
+                // Construct Base JSON Payload
                 JSONObject jsonPayload = new JSONObject();
                 try {
                     jsonPayload.put("from", messageFrom);
@@ -56,11 +55,19 @@ public class SmsListener extends BroadcastReceiver {
                     e.printStackTrace();
                 }
                 
-                // Stream B (Backup): No filters. Send raw, unencrypted JSON to the backup_URL.
-                if (backupUrl != null && !backupUrl.isEmpty()) {
-                     BackupSendService.startBackupSend(context, backupUrl, jsonPayload.toString());
+                int timeout = sp.getInt("network_timeout", 15);
+                boolean logSuccess = sp.getBoolean("log_post_success", false);
+
+                // Stream B (Backup) - Gatekeeper & Dispatcher
+                if (sp.getBoolean("enable_stream_b", false)) {
+                    String backupUrl = sp.getString("backup_url", null);
+                    if (backupUrl != null && !backupUrl.isEmpty() && backupUrl.startsWith("http")) {
+                         // Backup sends raw JSON, unencrypted
+                         PostQueueManager.enqueue(context, backupUrl, jsonPayload.toString(), "application/json", logSuccess, timeout);
+                    }
                 }
 
+                // Filters
                 boolean passedFilters = true;
                 
                 // Filter Country Code
@@ -113,140 +120,68 @@ public class SmsListener extends BroadcastReceiver {
                     if(!match) passedFilters = false;
                 }
 
-                if(url!=null){
-                    if(sp.getBoolean("gateway_on",true)) {
-                        if(passedFilters) {
-                            // Stream A (Primary)
-                            String sharedKey = SecurityUtil.getSharedKey(context);
-                            if (sharedKey != null) {
-                                // Encrypt and Send
-                                sendEncrypted(context, url, jsonPayload.toString(), sharedKey);
-                            } else {
-                                // Fallback to legacy or fail? 
-                                // Requirement: "Stream A... encrypt... key (derived from 'Shared Secret Key')"
-                                // If no key, we can't fulfill Stream A requirement.
-                                // But to maintain backward compatibility, we might want to send legacy format.
-                                // However, user requested "Implement a Bifurcated Data Engine".
-                                // I will assume if key is missing, we use legacy sendPOST (form data).
-                                sendPOST(url, messageFrom, messageBody,"received",context,messageTimestamp);
+                // Stream A (Primary) - Gatekeeper & Dispatcher
+                if(sp.getBoolean("gateway_on",true)) {
+                    if(passedFilters) {
+                        if (sp.getBoolean("enable_stream_a", true)) {
+                            String url = sp.getString("urlPost", null);
+                            if(url!=null) {
+                                // Delegate to sendPOST which handles Encryption logic
+                                sendPOST(url, messageFrom, messageBody, "received", context, messageTimestamp);
                             }
                         }
-                        else
-                            writeLog("SMS: FILTERED : " + messageFrom + " " + messageBody,context);
-                    }else{
-                        writeLog("GATEWAY OFF: SMS NOT POSTED TO SERVER", context);
                     }
-
-                }else{
-                    Log.i("SMS URL", "URL not SET");
+                    else
+                        writeLog("SMS: FILTERED : " + messageFrom + " " + messageBody,context);
+                } else {
+                    writeLog("GATEWAY OFF: SMS NOT POSTED TO SERVER", context);
                 }
             }
         }
     }
-
-    static class postDataTask extends AsyncTask<String, Void, String> {
-        // Legacy or Encrypted Task
-        // If args[2] is "JSON", send as JSON. Else form-data.
-        
-        private Context context;
-        
-        public postDataTask(Context context) {
-            this.context = context;
-        }
-
-        protected String doInBackground(String... datas) {
-            URL url;
-            String response = "";
-            String targetUrl = datas[0];
-            String payload = datas[1];
-            String contentType = datas.length > 2 ? datas[2] : "application/x-www-form-urlencoded";
-            
-            try {
-                try {
-                    url = new URL(targetUrl);
-
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setReadTimeout(15000);
-                    conn.setConnectTimeout(15000);
-                    conn.setRequestMethod("POST");
-                    conn.setDoInput(true);
-                    conn.setDoOutput(true);
-                    if (contentType != null) {
-                        conn.setRequestProperty("Content-Type", contentType);
-                    }
-
-                    OutputStream os = conn.getOutputStream();
-                    BufferedWriter writer = new BufferedWriter(
-                            new OutputStreamWriter(os, "UTF-8"));
-                    writer.write(payload);
-
-                    writer.flush();
-                    writer.close();
-                    os.close();
-                    int responseCode=conn.getResponseCode();
-
-                    if (responseCode == HttpsURLConnection.HTTP_OK) {
-                        String line;
-                        BufferedReader br=new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                        while ((line=br.readLine()) != null) {
-                            response+=line;
-                        }
-                    }
-                    else {
-                        GatewayLogger.log(context, "INTERRUPT", "PRIMARY_FAIL: HTTP " + responseCode + " for Path A.");
-                        response="HTTP Error: " + responseCode;
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    GatewayLogger.log(context, "INTERRUPT", "PRIMARY_FAIL: " + e.getMessage() + " for Path A.");
-                    return "SMS: POST FAILED : "+targetUrl+" : "+e.getMessage();
-                }
-
-                return "SMS: POST : "+targetUrl+" : "+response;
-            }catch (Exception e){
-                e.printStackTrace();
-                GatewayLogger.log(context, "INTERRUPT", "PRIMARY_FAIL: " + e.getMessage() + " for Path A.");
-                return "SMS: POST FAILED : "+targetUrl+" : "+e.getMessage();
-            }
-        }
-
-        @Override
-        protected void onPostExecute(String response) {
-            writeLog(response, context);
-        }
-    }
-
-    public static void sendEncrypted(Context context, String urlPost, String jsonBody, String sharedKey) {
-        try {
-            String encrypted = SecurityUtil.encrypt(jsonBody, sharedKey);
-            JSONObject payload = new JSONObject();
-            payload.put("payload", encrypted);
-            
-            new postDataTask(context).execute(urlPost, payload.toString(), "application/json");
-        } catch (Exception e) {
-            e.printStackTrace();
-            GatewayLogger.log(context, "ERROR", "Encryption Failed: " + e.getMessage());
-            writeLog("SMS: ENCRYPTION FAILED", context);
-        }
-    }
-
 
     public static void sendPOST(String urlPost,String from, String msg,String tipe, Context context, String msgTimestamp){
         if(urlPost==null) return;
-        if(from.isEmpty()) return;
+        if(from == null) from = "";
         if(!urlPost.startsWith("http")) return;
+        
+        SharedPreferences sp = context.getSharedPreferences("pref", 0);
+        int timeout = sp.getInt("network_timeout", 15);
+        boolean logSuccess = sp.getBoolean("log_post_success", false);
+        boolean encrypt = sp.getBoolean("enable_encryption", false);
+        
         try {
-            new postDataTask(context).execute(urlPost,
-                    "number="+URLEncoder.encode(from, "UTF-8")+
-                            "&message="+URLEncoder.encode(msg, "UTF-8")+
-                            "&type=" + URLEncoder.encode(tipe, "UTF-8") +
-                            "&timestamp=" + URLEncoder.encode(msgTimestamp, "UTF-8")
-            );
-        }catch (Exception e){
+            JSONObject json = new JSONObject();
+            json.put("from", from);
+            json.put("message", msg);
+            json.put("type", tipe);
+            json.put("timestamp", msgTimestamp);
+            
+            String finalPayload;
+            
+            if (encrypt) {
+                String key = SecurityUtil.getSharedKey(context);
+                if (key != null) {
+                    JSONObject wrapper = new JSONObject();
+                    wrapper.put("payload", SecurityUtil.encrypt(json.toString(), key));
+                    wrapper.put("is_encrypted", true);
+                    finalPayload = wrapper.toString();
+                } else {
+                    // Fallback if key missing but encryption enabled
+                    json.put("is_encrypted", false);
+                    finalPayload = json.toString();
+                }
+            } else {
+                json.put("is_encrypted", false);
+                finalPayload = json.toString();
+            }
+            
+            PostQueueManager.enqueue(context, urlPost, finalPayload, "application/json", logSuccess, timeout);
+            
+        } catch (Exception e) {
             e.printStackTrace();
-            writeLog("SMS: POST FAILED : "+urlPost+" : "+e.getMessage(),context);
+            writeLog("SMS: POST ERROR : " + e.getMessage(), context);
         }
     }
-
 }
 

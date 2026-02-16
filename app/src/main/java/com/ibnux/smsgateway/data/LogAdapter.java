@@ -31,17 +31,15 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.MyViewHolder> {
     }
 
     public LogAdapter() {
-        Fungsi.log("Data: " + ObjectBox.get().boxFor(LogLine.class).count());
+        Fungsi.log("Data: " + LiveLogBuffer.getLogs().size());
     }
 
     public void reload() {
         smallTime = System.currentTimeMillis();
         bigTime = 0;
-        if (search.length() > 0) {
-            datas = ObjectBox.get().boxFor(LogLine.class).query().contains(LogLine_.message, search).orderDesc(LogLine_.time).build().find(offset, limit);
-        } else {
-            datas = ObjectBox.get().boxFor(LogLine.class).query().orderDesc(LogLine_.time).build().find(offset, limit);
-        }
+        
+        datas = LiveLogBuffer.search(search);
+        
         for (int n = 0; n < getItemCount(); n++) {
             if (datas.get(n).time > bigTime) {
                 bigTime = datas.get(n).time;
@@ -60,40 +58,11 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.MyViewHolder> {
     }
 
     public void getNewData() {
-        List<LogLine> dts;
-        if (search.length() > 0) {
-            dts = ObjectBox.get().boxFor(LogLine.class).query().contains(LogLine_.message, search).greater(LogLine_.time, bigTime).order(LogLine_.time).build().find(offset, limit);
-        } else {
-            dts = ObjectBox.get().boxFor(LogLine.class).query().greater(LogLine_.time, bigTime).order(LogLine_.time).build().find(offset, limit);
-        }
-        for (int n = 0; n < dts.size(); n++) {
-            datas.add(0, dts.get(n));
-            if (dts.get(n).time > bigTime) {
-                bigTime = dts.get(n).time;
-            }
-        }
-        Fungsi.log("getNewData " + dts.size() + " " + bigTime);
-        notifyDataSetChanged();
-        if (datas.size() > 500) {
-            reload();
-        }
+        reload();
     }
 
     public void nextData() {
-        List<LogLine> dts;
-        if (search.length() > 0) {
-            dts = ObjectBox.get().boxFor(LogLine.class).query().contains(LogLine_.message, search).less(LogLine_.time, smallTime).orderDesc(LogLine_.time).build().find(offset, limit);
-        } else {
-            dts = ObjectBox.get().boxFor(LogLine.class).query().less(LogLine_.time, smallTime).orderDesc(LogLine_.time).build().find(offset, limit);
-        }
-        for (int n = 0; n < dts.size(); n++) {
-            datas.add(dts.get(n));
-            if (smallTime > dts.get(n).time) {
-                smallTime = dts.get(n).time;
-            }
-        }
-        Fungsi.log("nextData " + dts.size() + " " + smallTime);
-        notifyDataSetChanged();
+        // In-memory buffer is fully loaded in reload
     }
 
     @NonNull

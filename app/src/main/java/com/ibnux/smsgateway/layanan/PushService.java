@@ -29,6 +29,7 @@ import com.ibnux.smsgateway.Aplikasi;
 import com.ibnux.smsgateway.ObjectBox;
 import com.ibnux.smsgateway.Utils.Fungsi;
 import com.ibnux.smsgateway.Utils.SimUtil;
+import com.ibnux.smsgateway.data.LiveLogBuffer;
 import com.ibnux.smsgateway.data.LogLine;
 import com.ibnux.smsgateway.data.UssdData;
 
@@ -36,11 +37,8 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 
-import io.objectbox.Box;
-
 public class PushService extends Service {
     private String TAG = "SMSin";
-    private static Box<LogLine> logBox;
     private final static String simSlotName[] = {
             "extra_asus_dial_use_dualsim",
             "com.android.phone.extra.slot",
@@ -309,9 +307,12 @@ public class PushService extends Service {
     }
 
     static public void writeLog(String message, Context cx){
-        if(logBox==null){
-            logBox = ObjectBox.get().boxFor(LogLine.class);
-        }
+        try {
+            SharedPreferences sp = cx.getSharedPreferences("pref", 0);
+            int maxEntries = sp.getInt("live_stream_max", 100);
+            LiveLogBuffer.setMaxEntries(maxEntries);
+        } catch (Exception e) {}
+
         LogLine ll = new LogLine();
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(System.currentTimeMillis());
@@ -319,7 +320,8 @@ public class PushService extends Service {
         ll.date = cal.get(Calendar.YEAR) + "-" + (cal.get(Calendar.MONTH) + 1) + "-" + cal.get(Calendar.DAY_OF_MONTH) + " " +
                 cal.get(Calendar.HOUR_OF_DAY) + ":" + cal.get(Calendar.MINUTE) + ":" + cal.get(Calendar.SECOND);
         ll.message = message;
-        logBox.put(ll);
+        
+        LiveLogBuffer.add(ll);
         tellMainActivity();
     }
 
