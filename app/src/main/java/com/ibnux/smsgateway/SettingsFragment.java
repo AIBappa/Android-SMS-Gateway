@@ -29,6 +29,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.core.content.FileProvider;
 
+import com.ibnux.smsgateway.BuildConfig;
 import com.ibnux.smsgateway.Utils.Fungsi;
 import com.ibnux.smsgateway.Utils.GatewayLogger;
 import com.ibnux.smsgateway.Utils.SecurityUtil;
