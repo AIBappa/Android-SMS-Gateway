@@ -1,97 +1,76 @@
 
-# Android SMS Gateway  
-  
-This is recreate from [Old SMS Gateway](https://github.com/anjlab/android-sms-gateway)  
-now using Firebase  
-to turn my android as sms sender
+# Android SMS Gateway
 
-# HOW IT WORKS
+Recreated from [Old SMS Gateway](https://github.com/anjlab/android-sms-gateway). Now uses Firebase to turn an Android device into an SMS/USSD gateway.
 
-Sending SMS
+## How it works
 
-1. You send data to sms.ibnux.net (or your server)
-2. Server will send push notification
-3. App receive push notification, and route it to sms
-4. App receive sent notification, and post it to your server
-5. App receive delivered notification, and post it to your server
+Sending flow
 
-RECEIVE SMS
-1. App receive SMS
-2. App send it to your server
-  
-# HOW TO USE?  
-  
-Download APK from [release](https://github.com/ibnux/Android-SMS-Gateway/releases) page  
-  then open https://sms.ibnux.net/ to learn how to send sms
+1. You POST a send request to your server (see backend examples).
+2. Server forwards the request to Firebase Cloud Messaging (FCM).
+3. The app receives the FCM payload and sends SMS or initiates USSD.
+4. The app posts sent/delivery status back to your server.
 
-you can find backend folder for server side in this source
+Receiving flow
 
-to compile yourself, you need your own Firebase
+1. The app receives incoming SMS and (optionally) filters/encrypts it.
+2. It forwards messages to your configured server endpoint(s).
 
-# FEATURES
+Streams
 
-- SENDING SMS
-- RECEIVE SMS to SERVER
-- SENT NOTIFICATION to SERVER
-- DELIVERED NOTIFICATION to SERVER
-- USSD
-- MULTIPLE SIMCARD
-- RETRY SMS FAILED TO SENT 3 TIMES
+- Primary Receiver (Stream A): filtered and optionally AES-GCM encrypted payloads.
+- Backup Receiver (Stream B): raw copy of every received SMS (no filters, no encryption).
 
-## USSD Request
+## How to use
 
-Not all phone and carrier work with this, this feature need accessibility to read message and auto close USSD dialog, but some device failed to close Dialog, i use samsung S10 Lite and it cannot close dialog
+- Download APK from the releases page or build from source.
+- The app requires a Firebase project; add your Android app to Firebase and place `google-services.json` in `app/` before building.
+- Configure your server URL(s) and add the server API key where needed (see `backend/index.php`).
+- The app exposes a "Your Secret" and a Device ID (FCM token) in `app/src/main/java/com/ibnux/smsgateway/Aplikasi.java` which the server expects for authenticated send requests.
 
-## MULTIPLE SIMCARD
+API Documentation
 
-i think not all phone will work too, because of different of API for some OS which vendor has modification
+- See the API spec at [Documents/API_Documentation.yaml](Documents/API_Documentation.yaml).
 
-# Install on your own Server?
+## Features
 
-You need to understand how to build android Apps, and compile your own version.
+- Send SMS and initiate USSD via FCM push from server to device.
+- Forward incoming SMS to server (Primary and Backup streams).
+- Optional AES-GCM encryption for Primary stream.
+- Sent and Delivered status callbacks to server.
+- Basic multi-SIM support (behavior depends on device/vendor).
+- Retries for failed outgoing SMS (configurable in app).
 
-Create Firebase project, add apps to project to get google-services.json
+## USSD
 
-Add server key to **backend** script
+USSD support requires accessibility permission to read and close USSD dialogs. Behavior varies by device and vendor; some phones may not be able to automatically close the USSD dialog.
 
-You will see MyObjectBox error, just build it once, it will create automatically, read in [here](https://docs.objectbox.io/getting-started#generate-objectbox-code)
+## Building / Deploying
 
-## MQTT VERSION
+1. Create a Firebase project and add an Android app to obtain `google-services.json`.
+2. Put `google-services.json` into the `app/` directory.
+3. Edit `backend/index.php` to include your server key (if using the supplied backend) and adjust endpoints.
+4. Build the app with Gradle (Android Studio recommended).
 
-https://github.com/ibnux/Android-SMS-Gateway-MQTT/
+ObjectBox
 
-***
+When building you may see ObjectBox generated code errors — run a build once so ObjectBox can generate the model classes (see https://docs.objectbox.io/getting-started#generate-objectbox-code).
 
-## Traktir @ibnux
+## Backend
 
-[<img src="https://ibnux.github.io/KaryaKarsa-button/karyaKarsaButton.png" width="128">](https://karyakarsa.com/ibnux)
+The `backend/` folder contains a simple PHP example (`backend/index.php`) used to accept send requests and forward them to FCM. Customize it for your infrastructure and secure it appropriately.
 
-[<img src="https://ibnux.github.io/Trakteer-button/trakteer_button.png" width="120">](https://trakteer.id/ibnux)
+## MQTT Version
 
-## DONATE @ibnux
+An alternate MQTT-based implementation exists: https://github.com/ibnux/Android-SMS-Gateway-MQTT/
 
-[paypal.me/ibnux](https://paypal.me/ibnux)
+---
 
-# LICENSE  
-## Apache License 2.0  
-  
-Permissions  
-  
-    ✓ Commercial use  
-    ✓ Distribution  
-    ✓ Modification  
-    ✓ Patent use  
-    ✓ Private use  
-  
-Conditions  
-  
-    License and copyright notice  
-    State changes  
-  
-Limitations  
-  
-    No Liability  
-    No Trademark use  
-    No Warranty  
-  
-you can find license file inside folder
+## Donate
+
+- paypal.me/ibnux
+
+## License
+
+Apache License 2.0 — see the `LICENSE` file included with the project.
