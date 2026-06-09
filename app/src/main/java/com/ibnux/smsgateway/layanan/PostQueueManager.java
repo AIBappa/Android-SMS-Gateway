@@ -1,7 +1,9 @@
 package com.ibnux.smsgateway.layanan;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import com.ibnux.smsgateway.Utils.GatewayLogger;
+import com.ibnux.smsgateway.Utils.SecurityUtil;
 import java.io.BufferedWriter;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -35,6 +37,23 @@ public class PostQueueManager {
             conn.setDoOutput(true);
             if (contentType != null) {
                 conn.setRequestProperty("Content-Type", contentType);
+            }
+
+            // HMAC-SHA256 Signing
+            boolean hmacEnabled = context.getSharedPreferences("pref", 0).getBoolean("enable_hmac_signing", false);
+            if (hmacEnabled) {
+                String hmacKey = SecurityUtil.getHmacKey(context);
+                if (hmacKey != null && !hmacKey.isEmpty()) {
+                    String signature = SecurityUtil.signPayload(payload, hmacKey);
+                    if (signature != null) {
+                        conn.setRequestProperty("X-signature", signature);
+                        GatewayLogger.log(context, "HMAC", "HMAC_SIGN_SUCCESS: Signature added to " + targetUrl);
+                    } else {
+                        GatewayLogger.log(context, "HMAC", "HMAC_SIGN_FAILED: Could not generate signature for " + targetUrl);
+                    }
+                } else {
+                    GatewayLogger.log(context, "HMAC", "HMAC_KEY_MISSING: HMAC enabled but no key configured for " + targetUrl);
+                }
             }
 
             OutputStream os = conn.getOutputStream();

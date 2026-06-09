@@ -218,6 +218,70 @@ public class SettingsFragment extends Fragment {
         
         containerSubMenuContent.addView(securitySection);
 
+        // --- Section: Webhook Signature (HMAC-SHA256) ---
+        LinearLayout hmacSection = createSection(ctx, "Webhook Signature (HMAC-SHA256)");
+        
+        // Toggle: Enable HMAC Signing
+        Switch swHmac = new Switch(ctx);
+        swHmac.setText("Enable HMAC Signing");
+        swHmac.setChecked(sp.getBoolean("enable_hmac_signing", false));
+        swHmac.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_hmac_signing", isChecked).apply();
+            logAction("HMAC Toggle", "Set to " + isChecked);
+        });
+        hmacSection.addView(swHmac);
+
+        // Key Management
+        String currentHmacKey = SecurityUtil.getHmacKey(ctx);
+        EditText etHmacKey = new EditText(ctx);
+        etHmacKey.setHint("HMAC Key (Base64)");
+        etHmacKey.setText(currentHmacKey != null ? currentHmacKey : "");
+        hmacSection.addView(etHmacKey);
+
+        LinearLayout hmacKeyButtons = new LinearLayout(ctx);
+        hmacKeyButtons.setOrientation(LinearLayout.HORIZONTAL);
+        
+        Button btnGenHmacKey = new Button(ctx);
+        btnGenHmacKey.setText("Generate New Key");
+        btnGenHmacKey.setOnClickListener(v -> {
+            String newKey = SecurityUtil.generateHmacKey();
+            etHmacKey.setText(newKey);
+            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
+        });
+        
+        Button btnSaveHmacKey = new Button(ctx);
+        btnSaveHmacKey.setText("Use This Key");
+        btnSaveHmacKey.setOnClickListener(v -> {
+            String key = etHmacKey.getText().toString();
+            if(!key.isEmpty()) {
+                SecurityUtil.saveHmacKey(ctx, key);
+                logAction("Updated HMAC Key", "New HMAC key saved");
+                Toast.makeText(ctx, "HMAC Key Saved", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        hmacKeyButtons.addView(btnGenHmacKey);
+        hmacKeyButtons.addView(btnSaveHmacKey);
+        hmacSection.addView(hmacKeyButtons);
+
+        // Clipboard
+        Button btnCopyHmacKey = new Button(ctx);
+        btnCopyHmacKey.setText("Copy Active Key");
+        btnCopyHmacKey.setOnClickListener(v -> {
+            String activeKey = SecurityUtil.getHmacKey(ctx);
+            if(activeKey != null) {
+                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("HMAC Key", activeKey);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
+            }
+        });
+        hmacSection.addView(btnCopyHmacKey);
+        
+        containerSubMenuContent.addView(hmacSection);
+
         // --- Section 2: Sequential Dispatcher & Gatekeeper ---
         LinearLayout dispatchSection = createSection(ctx, "Dispatcher & Gatekeeper");
 

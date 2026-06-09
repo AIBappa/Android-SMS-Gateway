@@ -82,6 +82,7 @@ paths:
         **Key Files:**
         - **Trigger (SMS)**: `app/src/main/java/com/ibnux/smsgateway/layanan/SmsListener.java` (Captures SMS, applies filters, initiates upload)
         - **Encryption**: `app/src/main/java/com/ibnux/smsgateway/Utils/SecurityUtil.java` (Encrypts payload using AES-GCM)
+        - **Signing**: `app/src/main/java/com/ibnux/smsgateway/layanan/PostQueueManager.java` (Adds HMAC-SHA256 signature header)
         
         **Mode 1: Encryption Enabled (Default)**
         - **Payload**: JSON Object with `is_encrypted: true` and a `payload` string.
@@ -90,6 +91,13 @@ paths:
         
         **Mode 2: Encryption Disabled**
         - **Payload**: JSON Object with `is_encrypted: false` and raw message fields (`from`, `message`, etc.).
+        
+        **HMAC-SHA256 Signature (Optional)**
+        - When "Enable HMAC Signing" is toggled on in the Android app, every POST request includes an `X-Signature` header.
+        - **Algorithm**: HMAC-SHA256 using a 256-bit key.
+        - **Header**: `X-Signature: <Base64-encoded HMAC-SHA256 digest of the raw request body>`
+        - **Verification**: The backend recomputes the HMAC using its configured key and compares with `hash_equals()`. A mismatch returns 403 Forbidden.
+        - **Backward Compatible**: When HMAC signing is disabled on the app, no header is sent and the backend processes requests normally (when `$hmac_signing_enabled` is `false`).
       operationId: receivePrimarySms
       requestBody:
         required: true
@@ -99,13 +107,35 @@ paths:
               oneOf:
                 - $ref: '#/components/schemas/EncryptedPayload'
                 - $ref: '#/components/schemas/UnencryptedPayload'
+            examples:
+              encrypted-with-signature:
+                summary: Encrypted payload with HMAC-SHA256 signature
+                value:
+                  is_encrypted: true
+                  payload: "VGhpcyBpcyBhbiBleGFtcGxlIGVuY3J5cHRlZCBwYXlsb2Fk..."
+              unencrypted-with-signature:
+                summary: Unencrypted payload with HMAC-SHA256 signature
+                value:
+                  is_encrypted: false
+                  from: "+1234567890"
+                  message: "Hello World"
+                  type: "received"
+                  timestamp: "1678886400000"
       responses:
         '200':
           description: Message received successfully
         '400':
           description: Bad Request
+        '403':
+          description: Forbidden — HMAC signature verification failed (X-Signature missing or invalid)
         '500':
           description: Server Error
+      headers:
+        X-Signature:
+          description: HMAC-SHA256 signature of the raw request body (Base64). Required when HMAC signing is enabled.
+          schema:
+            type: string
+          example: "dGhpcyBpcyBhIGJhc2U2NCBzaWduYXR1cmUgZXhhbXBsZQ=="
 
   /sms/ussd:
     post:
