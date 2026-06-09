@@ -148,6 +148,37 @@ public class SettingsFragment extends Fragment {
                 logAction("Updated Expiry", "New value: " + exp);
             } catch (Exception e) {}
         });
+
+        // --- WebSocket Tunnel Section ---
+        TextView wsInfo = new TextView(ctx);
+        wsInfo.setTypeface(null, android.graphics.Typeface.BOLD);
+        wsInfo.setTextSize(16);
+        wsInfo.setText("WebSocket Tunnel (Replaces Firebase Push)");
+        wsInfo.setPadding(0, 30, 0, 10);
+        containerSubMenuContent.addView(wsInfo);
+
+        addEditableField("WebSocket Server URL (wss://)", sp.getString("websocket_url", ""), value -> {
+            sp.edit().putString("websocket_url", value).commit();
+            logAction("Updated WebSocket URL", value);
+        });
+
+        // WebSocket Toggle
+        final boolean wsConnected = com.ibnux.smsgateway.layanan.WebSocketService.isRunning;
+        Switch swWebSocket = new Switch(ctx);
+        swWebSocket.setText("Enable WebSocket Tunnel");
+        swWebSocket.setChecked(wsConnected);
+        swWebSocket.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                com.ibnux.smsgateway.layanan.WebSocketService.start(ctx);
+                logAction("WebSocket Tunnel", "Started");
+            } else {
+                com.ibnux.smsgateway.layanan.WebSocketService.stop(ctx);
+                logAction("WebSocket Tunnel", "Stopped");
+            }
+        });
+        containerSubMenuContent.addView(swWebSocket);
+
+        addReadOnlyField("Note", "Pushes your server's SMS/USSD commands to this device via a persistent WebSocket tunnel. No Firebase required.");
     }
 
     // --- 3.2 SMS Webhook ---
@@ -562,6 +593,17 @@ public class SettingsFragment extends Fragment {
         
         // --- Section 3: Maintenance & Storage ---
         LinearLayout maintSection = createSection(ctx, "Inbox Maintenance");
+
+        // Info note about inbox scope
+        final TextView tvNote = new TextView(ctx);
+        tvNote.setText("Note: Inbox maintenance is only relevant for SMSes sent from this device. " +
+                "Incoming SMSes from the SMS Webhook functionality are NOT stored on this device — " +
+                "they are only forwarded to your configured webhook URL(s). " +
+                "Use the Backup URL to ensure all incoming SMSes are independently stored.");
+        tvNote.setPadding(10, 10, 10, 20);
+        tvNote.setTextSize(13);
+        tvNote.setTextColor(android.graphics.Color.parseColor("#666666"));
+        maintSection.addView(tvNote);
 
         // Auto-Delete
         CheckBox cbAuto = new CheckBox(ctx);
