@@ -1,7 +1,8 @@
-
 # Android SMS Gateway
 
-Recreated from [Old SMS Gateway](https://github.com/anjlab/android-sms-gateway). Now uses Firebase to turn an Android device into an SMS/USSD gateway.
+Recreated from the original [anjlab/android-sms-gateway](https://github.com/anjlab/android-sms-gateway).  
+Forked and enhanced from [ibnux/Android-SMS-Gateway](https://github.com/ibnux/Android-SMS-Gateway).  
+Now uses Firebase to turn an Android device into an SMS/USSD gateway.
 
 ## How it works
 
@@ -29,7 +30,22 @@ Streams
 - Configure your server URL(s) and add the server API key where needed (see `backend/index.php`).
 - The app exposes a "Your Secret" and a Device ID (FCM token) in `app/src/main/java/com/ibnux/smsgateway/Aplikasi.java` which the server expects for authenticated send requests.
 
-API Documentation
+## App Overview
+
+The app provides two tabs:
+
+### 1. Live Stream
+Real-time view of SMS/USSD activity as it happens on the device.
+
+### 2. Settings
+Four configuration menus:
+
+- **Push & USSD Messaging** — Manage your Secret ID, Device ID (FCM token), USSD test/permissions, push/USSD endpoints, request expiry, and WebSocket tunnel settings (alternative to Firebase push).
+- **SMS Webhook** — Configure primary and backup receiver URLs, AES-GCM encryption, HMAC-SHA256 webhook signing, network timeout, and SMS filters (country codes, message prefix, message length).
+- **Unified & System Logs** — Browse paginated audit logs of user actions and system failure/error logs; share or clear logs.
+- **System Settings** — Set as default SMS app, manage inbox auto-delete/retention, configure live stream max entries and POST logging, disable battery optimization.
+
+## API Documentation
 
 - See the API spec at [Documents/API_Documentation.yaml](Documents/API_Documentation.yaml).
 
@@ -38,9 +54,11 @@ API Documentation
 - Send SMS and initiate USSD via FCM push from server to device.
 - Forward incoming SMS to server (Primary and Backup streams).
 - Optional AES-GCM encryption for Primary stream.
+- Optional HMAC-SHA256 webhook signing.
 - Sent and Delivered status callbacks to server.
 - Basic multi-SIM support (behavior depends on device/vendor).
 - Retries for failed outgoing SMS (configurable in app).
+- WebSocket tunnel as an alternative to Firebase push.
 
 ## USSD
 
@@ -66,10 +84,6 @@ The `backend/` folder contains a simple PHP example (`backend/index.php`) used t
 An alternate MQTT-based implementation exists: https://github.com/ibnux/Android-SMS-Gateway-MQTT/
 
 ---
-
-## Donate
-
-- paypal.me/ibnux
 
 ## License
 
