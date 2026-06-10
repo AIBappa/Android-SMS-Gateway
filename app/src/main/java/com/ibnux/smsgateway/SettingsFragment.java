@@ -29,6 +29,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.core.content.FileProvider;
 
+import com.ibnux.smsgateway.BuildConfig;
 import com.ibnux.smsgateway.Utils.Fungsi;
 import com.ibnux.smsgateway.Utils.GatewayLogger;
 import com.ibnux.smsgateway.Utils.SecurityUtil;
@@ -147,6 +148,37 @@ public class SettingsFragment extends Fragment {
                 logAction("Updated Expiry", "New value: " + exp);
             } catch (Exception e) {}
         });
+
+        // --- WebSocket Tunnel Section ---
+        TextView wsInfo = new TextView(ctx);
+        wsInfo.setTypeface(null, android.graphics.Typeface.BOLD);
+        wsInfo.setTextSize(16);
+        wsInfo.setText("WebSocket Tunnel (Replaces Firebase Push)");
+        wsInfo.setPadding(0, 30, 0, 10);
+        containerSubMenuContent.addView(wsInfo);
+
+        addEditableField("WebSocket Server URL (wss://)", sp.getString("websocket_url", ""), value -> {
+            sp.edit().putString("websocket_url", value).commit();
+            logAction("Updated WebSocket URL", value);
+        });
+
+        // WebSocket Toggle
+        final boolean wsConnected = com.ibnux.smsgateway.layanan.WebSocketService.isRunning;
+        Switch swWebSocket = new Switch(ctx);
+        swWebSocket.setText("Enable WebSocket Tunnel");
+        swWebSocket.setChecked(wsConnected);
+        swWebSocket.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                com.ibnux.smsgateway.layanan.WebSocketService.start(ctx);
+                logAction("WebSocket Tunnel", "Started");
+            } else {
+                com.ibnux.smsgateway.layanan.WebSocketService.stop(ctx);
+                logAction("WebSocket Tunnel", "Stopped");
+            }
+        });
+        containerSubMenuContent.addView(swWebSocket);
+
+        addReadOnlyField("Note", "Pushes your server's SMS/USSD commands to this device via a persistent WebSocket tunnel. No Firebase required.");
     }
 
     // --- 3.2 SMS Webhook ---
@@ -216,6 +248,70 @@ public class SettingsFragment extends Fragment {
         securitySection.addView(btnCopyKey);
         
         containerSubMenuContent.addView(securitySection);
+
+        // --- Section: Webhook Signature (HMAC-SHA256) ---
+        LinearLayout hmacSection = createSection(ctx, "Webhook Signature (HMAC-SHA256)");
+        
+        // Toggle: Enable HMAC Signing
+        Switch swHmac = new Switch(ctx);
+        swHmac.setText("Enable HMAC Signing");
+        swHmac.setChecked(sp.getBoolean("enable_hmac_signing", false));
+        swHmac.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_hmac_signing", isChecked).apply();
+            logAction("HMAC Toggle", "Set to " + isChecked);
+        });
+        hmacSection.addView(swHmac);
+
+        // Key Management
+        String currentHmacKey = SecurityUtil.getHmacKey(ctx);
+        EditText etHmacKey = new EditText(ctx);
+        etHmacKey.setHint("HMAC Key (Base64)");
+        etHmacKey.setText(currentHmacKey != null ? currentHmacKey : "");
+        hmacSection.addView(etHmacKey);
+
+        LinearLayout hmacKeyButtons = new LinearLayout(ctx);
+        hmacKeyButtons.setOrientation(LinearLayout.HORIZONTAL);
+        
+        Button btnGenHmacKey = new Button(ctx);
+        btnGenHmacKey.setText("Generate New Key");
+        btnGenHmacKey.setOnClickListener(v -> {
+            String newKey = SecurityUtil.generateHmacKey();
+            etHmacKey.setText(newKey);
+            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
+        });
+        
+        Button btnSaveHmacKey = new Button(ctx);
+        btnSaveHmacKey.setText("Use This Key");
+        btnSaveHmacKey.setOnClickListener(v -> {
+            String key = etHmacKey.getText().toString();
+            if(!key.isEmpty()) {
+                SecurityUtil.saveHmacKey(ctx, key);
+                logAction("Updated HMAC Key", "New HMAC key saved");
+                Toast.makeText(ctx, "HMAC Key Saved", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        hmacKeyButtons.addView(btnGenHmacKey);
+        hmacKeyButtons.addView(btnSaveHmacKey);
+        hmacSection.addView(hmacKeyButtons);
+
+        // Clipboard
+        Button btnCopyHmacKey = new Button(ctx);
+        btnCopyHmacKey.setText("Copy Active Key");
+        btnCopyHmacKey.setOnClickListener(v -> {
+            String activeKey = SecurityUtil.getHmacKey(ctx);
+            if(activeKey != null) {
+                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("HMAC Key", activeKey);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
+            }
+        });
+        hmacSection.addView(btnCopyHmacKey);
+        
+        containerSubMenuContent.addView(hmacSection);
 
         // --- Section 2: Sequential Dispatcher & Gatekeeper ---
         LinearLayout dispatchSection = createSection(ctx, "Dispatcher & Gatekeeper");
@@ -497,6 +593,17 @@ public class SettingsFragment extends Fragment {
         
         // --- Section 3: Maintenance & Storage ---
         LinearLayout maintSection = createSection(ctx, "Inbox Maintenance");
+
+        // Info note about inbox scope
+        final TextView tvNote = new TextView(ctx);
+        tvNote.setText("Note: Inbox maintenance is only relevant for SMSes sent from this device. " +
+                "Incoming SMSes from the SMS Webhook functionality are NOT stored on this device — " +
+                "they are only forwarded to your configured webhook URL(s). " +
+                "Use the Backup URL to ensure all incoming SMSes are independently stored.");
+        tvNote.setPadding(10, 10, 10, 20);
+        tvNote.setTextSize(13);
+        tvNote.setTextColor(android.graphics.Color.parseColor("#666666"));
+        maintSection.addView(tvNote);
 
         // Auto-Delete
         CheckBox cbAuto = new CheckBox(ctx);

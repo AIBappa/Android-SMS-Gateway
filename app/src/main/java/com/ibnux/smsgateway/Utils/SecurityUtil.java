@@ -8,6 +8,7 @@ import android.util.Log;
 import java.security.SecureRandom;
 
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -17,6 +18,9 @@ public class SecurityUtil {
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int TAG_LENGTH_BIT = 128;
     private static final int IV_LENGTH_BYTE = 12;
+    private static final String HMAC_ALGORITHM = "HmacSHA256";
+
+    // --- AES-GCM Encryption Methods ---
 
     public static String generateNewKey() {
         SecureRandom secureRandom = new SecureRandom();
@@ -59,5 +63,39 @@ public class SecurityUtil {
     public static String getSharedKey(Context context) {
          SharedPreferences sp = context.getSharedPreferences("pref", 0);
          return sp.getString("shared_secret_key", null);
+    }
+
+    // --- HMAC-SHA256 Signing Methods ---
+
+    public static String generateHmacKey() {
+        SecureRandom secureRandom = new SecureRandom();
+        byte[] key = new byte[32]; // 256 bit
+        secureRandom.nextBytes(key);
+        return Base64.encodeToString(key, Base64.NO_WRAP);
+    }
+
+    public static String getHmacKey(Context context) {
+        SharedPreferences sp = context.getSharedPreferences("pref", 0);
+        return sp.getString("hmac_secret_key", null);
+    }
+
+    public static void saveHmacKey(Context context, String key) {
+        SharedPreferences sp = context.getSharedPreferences("pref", 0);
+        sp.edit().putString("hmac_secret_key", key).apply();
+        GatewayLogger.log(context, "HMAC", "HMAC_KEY_GENERATED: New HMAC key saved.");
+    }
+
+    public static String signPayload(String payload, String hmacKey) {
+        try {
+            byte[] keyBytes = Base64.decode(hmacKey, Base64.NO_WRAP);
+            SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, HMAC_ALGORITHM);
+            Mac mac = Mac.getInstance(HMAC_ALGORITHM);
+            mac.init(secretKeySpec);
+            byte[] signature = mac.doFinal(payload.getBytes("UTF-8"));
+            return Base64.encodeToString(signature, Base64.NO_WRAP);
+        } catch (Exception e) {
+            Log.e(TAG, "HMAC signing failed: " + e.getMessage(), e);
+            return null;
+        }
     }
 }

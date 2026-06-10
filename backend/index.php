@@ -1,20 +1,82 @@
 <?php
 
-
 /**
- * TODO
- * Firebase Cloud Messaging API (V1)
- * Json file from services account
- * https://console.firebase.google.com/
+ * Android SMS Gateway backend example.
+ *
+ * Configuration:
+ *  - Place your Firebase service account JSON file in this folder.
+ *  - Set $firebaseAuthFile to the correct filename or absolute path.
+ *  - Set $firebaseProject to your Firebase project ID.
+ *
+ * Send API example (from server to device):
+ *  POST /backend/index.php
+ *  Content-Type: application/x-www-form-urlencoded
+ *  to=<recipient>&text=<message>&secret=<app-secret>&deviceID=<fcm-token>&sim=0
+ *
+ * Receive callbacks from the app:
+ *  POST /backend/index.php
+ *  number=<sender>&message=<body>&type=<received|sent|delivered|ussd>
+ *
+ * Note: Secure this script before using in production. The app secret is checked in the app,
+ * but this example does not implement additional server-side authentication.
  */
-$firebaseAuthFile = "pachi-lms-d73708832973.json";
+$firebaseAuthFile = __DIR__ . "/pachi-lms-d73708832973.json";
 $firebaseProject = "pachi-lms";
 
+// Optional override from a local config file.
+$configFile = __DIR__ . '/backend-config.php';
+if (file_exists($configFile)) {
+    include $configFile;
+}
+
+// HMAC-SHA256 Signature Verification (for incoming webhook payloads)
+if (!empty($hmac_signing_enabled) || (isset($hmac_signing_enabled) && $hmac_signing_enabled === true)) {
+    $signature = isset($_SERVER['HTTP_X_SIGNATURE']) ? $_SERVER['HTTP_X_SIGNATURE'] : '';
+    $rawBody = file_get_contents('php://input');
+
+    if (empty($signature)) {
+        // No signature provided
+        $logMsg = "SIGNATURE_VERIFICATION_FAILED: No X-Signature header";
+        if (isset($hmac_log_verifications) && $hmac_log_verifications) {
+            file_put_contents(__DIR__ . "/log.txt", "[" . date("Y-m-d H:i:s") . "] " . $logMsg . "\n", FILE_APPEND);
+        }
+        http_response_code(403);
+        die('FORBIDDEN');
+    }
+
+    if (empty($hmac_secret_key)) {
+        // Key not configured
+        $logMsg = "SIGNATURE_VERIFICATION_FAILED: HMAC secret key not configured";
+        if (isset($hmac_log_verifications) && $hmac_log_verifications) {
+            file_put_contents(__DIR__ . "/log.txt", "[" . date("Y-m-d H:i:s") . "] " . $logMsg . "\n", FILE_APPEND);
+        }
+        http_response_code(403);
+        die('FORBIDDEN');
+    }
+
+    // Regenerate the expected signature
+    $expectedSignature = base64_encode(hash_hmac('sha256', $rawBody, $hmac_secret_key, true));
+
+    if (!hash_equals($expectedSignature, $signature)) {
+        $logMsg = "SIGNATURE_VERIFICATION_FAILED: Signature mismatch";
+        if (isset($hmac_log_verifications) && $hmac_log_verifications) {
+            file_put_contents(__DIR__ . "/log.txt", "[" . date("Y-m-d H:i:s") . "] " . $logMsg . "\n", FILE_APPEND);
+        }
+        http_response_code(403);
+        die('FORBIDDEN');
+    }
+
+    // Signature verified
+    if (isset($hmac_log_verifications) && $hmac_log_verifications) {
+        file_put_contents(__DIR__ . "/log.txt", "[" . date("Y-m-d H:i:s") . "] SIGNATURE_VERIFIED\n", FILE_APPEND);
+    }
+}
+
 // RECEIVING MESSAGE
-$number = urldecode($_POST['number']);
-$message = urldecode($_POST['message']);
+$number = isset($_POST['number']) ? urldecode($_POST['number']) : '';
+$message = isset($_POST['message']) ? urldecode($_POST['message']) : '';
 // type = received / sent / delivered / USSD
-$type = urldecode($_POST['type']);
+$type = isset($_POST['type']) ? urldecode($_POST['type']) : '';
 
 if (!empty($number) && !empty($message) && !empty($type)) {
     // Process received SMS in here
@@ -39,7 +101,11 @@ if (isset($_GET['debug']) && count($_REQUEST) > 1)
     file_put_contents("log.txt", json_encode($_REQUEST) . "\n\n", FILE_APPEND);
 
 if (empty($to) || empty($text) || empty($secret) || empty($token)) {
-    readfile("info.txt");
+    header('Content-Type: text/plain');
+    echo "Missing required send parameters.\n";
+    echo "Required: to, text, secret, deviceID. Optional: sim, time.\n";
+    echo "For receive callbacks, send: number, message, type.\n";
+    echo "See backend/index.php comments for usage details.\n";
     die();
 }
 
