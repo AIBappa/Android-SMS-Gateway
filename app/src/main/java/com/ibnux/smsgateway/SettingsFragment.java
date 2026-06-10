@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.InputType;
 import android.view.LayoutInflater;
@@ -690,10 +691,61 @@ public class SettingsFragment extends Fragment {
         
         containerSubMenuContent.addView(loggingSection);
 
-        // c) Battery
-        addButton("Disable Battery Optimization", v -> {
-            startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:"+BuildConfig.APPLICATION_ID)));
+        // c) Battery — Status-aware battery optimization section
+        Context ctxBatt = requireContext();
+        PowerManager pm = (PowerManager) ctxBatt.getSystemService(Context.POWER_SERVICE);
+        boolean isIgnoring = pm != null && pm.isIgnoringBatteryOptimizations(ctxBatt.getPackageName());
+
+        LinearLayout batterySection = new LinearLayout(ctxBatt);
+        batterySection.setOrientation(LinearLayout.VERTICAL);
+        batterySection.setPadding(0, 10, 0, 10);
+
+        TextView batteryTitle = new TextView(ctxBatt);
+        batteryTitle.setText("Battery Optimization");
+        batteryTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+
+        TextView batteryStatus = new TextView(ctxBatt);
+        if (isIgnoring) {
+            batteryStatus.setText("✓ Disabled (app can run in background)");
+            batteryStatus.setTextColor(0xFF2E7D32); // green
+        } else {
+            batteryStatus.setText("✗ Active (app may be killed)");
+            batteryStatus.setTextColor(0xFFC62828); // red
+        }
+        batteryStatus.setTextSize(14);
+
+        batterySection.addView(batteryTitle);
+        batterySection.addView(batteryStatus);
+
+        // Always show a button to re-request or open system battery settings
+        Button battBtn = new Button(ctxBatt);
+        if (isIgnoring) {
+            battBtn.setText("Open System Battery Settings");
+        } else {
+            battBtn.setText("Request Disable Battery Optimization");
+        }
+        battBtn.setOnClickListener(v -> {
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(ctxBatt.getPackageName())) {
+                // First try the standard API
+                try {
+                    startActivity(new Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:" + BuildConfig.APPLICATION_ID)
+                    ));
+                } catch (Exception e) {
+                    // Fallback: open system battery settings page
+                    Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                    startActivity(intent);
+                }
+            } else {
+                // Already exempted — open system battery settings for further tweaks
+                Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                startActivity(intent);
+            }
         });
+        batterySection.addView(battBtn);
+
+        containerSubMenuContent.addView(batterySection);
     }
 
     // --- Helpers ---

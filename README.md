@@ -6,21 +6,18 @@ Turn an Android device into an SMS/USSD gateway.
 
 ## How it works
 
-Sending flow
+SMS Sending flow (Push and USSD Messaging)
 
 1. Your application sends a command to the device via the WebSocket tunnel or a configured push URL.
 2. The app receives the command and sends SMS or initiates USSD.
 3. The app posts sent/delivery status back to your configured webhook URL(s).
 
-Receiving flow
+SMS Receiving flow (SMS Webhook)
 
 1. The app receives incoming SMS and (optionally) filters/encrypts it.
-2. It forwards messages to your configured server endpoint(s).
-
-Streams
-
-- Primary Receiver (Stream A): filtered and optionally AES-GCM encrypted payloads.
-- Backup Receiver (Stream B): raw copy of every received SMS (no filters, no encryption).
+2. It forwards messages to your configured server endpoint(s) as below.
+   - Primary Receiver (Stream A): filtered and optionally AES-GCM encrypted payloads.
+   - Backup Receiver (Stream B): raw copy of every received SMS (no filters, no encryption).
 
 ## How to use
 
