@@ -27,10 +27,6 @@
         android:title="Clear Logs" />
 
     <item
-        android:id="@+id/menu_battery_optimization"
-        android:title="Disable Battery optimization" />
-
-    <item
         android:id="@+id/menu_ussd_set"
         android:title="USSD Permission" />
 

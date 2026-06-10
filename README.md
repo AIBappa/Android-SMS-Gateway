@@ -1,75 +1,96 @@
-
 # Android SMS Gateway
 
-Recreated from [Old SMS Gateway](https://github.com/anjlab/android-sms-gateway). Now uses Firebase to turn an Android device into an SMS/USSD gateway.
+Recreated from the original [anjlab/android-sms-gateway](https://github.com/anjlab/android-sms-gateway).  
+Forked and enhanced from [ibnux/Android-SMS-Gateway](https://github.com/ibnux/Android-SMS-Gateway).  
+Turn an Android device into an SMS/USSD gateway.
 
 ## How it works
 
-Sending flow
+SMS Sending flow (Push and USSD Messaging)
 
-1. You POST a send request to your server (see backend examples).
-2. Server forwards the request to Firebase Cloud Messaging (FCM).
-3. The app receives the FCM payload and sends SMS or initiates USSD.
-4. The app posts sent/delivery status back to your server.
+1. Your application sends a command to the device via the WebSocket tunnel or a configured push URL.
+2. The app receives the command and sends SMS or initiates USSD.
+3. The app posts sent/delivery status back to your configured webhook URL(s).
 
-Receiving flow
+SMS Receiving flow (SMS Webhook)
 
 1. The app receives incoming SMS and (optionally) filters/encrypts it.
-2. It forwards messages to your configured server endpoint(s).
-
-Streams
-
-- Primary Receiver (Stream A): filtered and optionally AES-GCM encrypted payloads.
-- Backup Receiver (Stream B): raw copy of every received SMS (no filters, no encryption).
+2. It forwards messages to your configured server endpoint(s) as below.
+   - Primary Receiver (Stream A): filtered and optionally AES-GCM encrypted payloads.
+   - Backup Receiver (Stream B): raw copy of every received SMS (no filters, no encryption).
 
 ## How to use
 
 - Download APK from the releases page or build from source.
-- The app requires a Firebase project; add your Android app to Firebase and place `google-services.json` in `app/` before building.
-- Configure your server URL(s) and add the server API key where needed (see `backend/index.php`).
-- The app exposes a "Your Secret" and a Device ID (FCM token) in `app/src/main/java/com/ibnux/smsgateway/Aplikasi.java` which the server expects for authenticated send requests.
+- Build the app with Android Studio (Gradle). No Firebase setup is required.
+- Configure your server URL(s) in the app Settings.
+- The app exposes a "Your Secret" and a Device ID in the Settings → Push & USSD Messaging menu, which external applications use for authenticated send requests.
 
-API Documentation
+## App Overview
+
+The app provides two tabs:
+
+### 1. Live Stream
+Real-time view of SMS/USSD activity as it happens on the device.
+
+### 2. Settings
+Four configuration menus:
+
+- **Push & USSD Messaging** — Manage your Secret ID, Device ID, USSD test/permissions, push/USSD endpoints, request expiry, and WebSocket tunnel settings.
+- **SMS Webhook** — Configure primary and backup receiver URLs, AES-GCM encryption, HMAC-SHA256 webhook signing, network timeout, and SMS filters (country codes, message prefix, message length).
+- **Unified & System Logs** — Browse paginated audit logs of user actions and system failure/error logs; share or clear logs.
+- **System Settings** — Set as default SMS app, manage inbox auto-delete/retention, configure live stream max entries and POST logging, disable battery optimization.
+
+## API Documentation
 
 - See the API spec at [Documents/API_Documentation.yaml](Documents/API_Documentation.yaml).
 
 ## Features
 
-- Send SMS and initiate USSD via FCM push from server to device.
+- Send SMS and initiate USSD from server to device via WebSocket tunnel or push URL.
 - Forward incoming SMS to server (Primary and Backup streams).
 - Optional AES-GCM encryption for Primary stream.
+- Optional HMAC-SHA256 webhook signing.
 - Sent and Delivered status callbacks to server.
 - Basic multi-SIM support (behavior depends on device/vendor).
 - Retries for failed outgoing SMS (configurable in app).
+- WebSocket tunnel for persistent server-to-device push.
 
 ## USSD
 
 USSD support requires accessibility permission to read and close USSD dialogs. Behavior varies by device and vendor; some phones may not be able to automatically close the USSD dialog.
 
-## Building / Deploying
+## Building
 
-1. Create a Firebase project and add an Android app to obtain `google-services.json`.
-2. Put `google-services.json` into the `app/` directory.
-3. Edit `backend/index.php` to include your server key (if using the supplied backend) and adjust endpoints.
-4. Build the app with Gradle (Android Studio recommended).
+Build the app with Gradle (Android Studio recommended).
 
 ObjectBox
 
 When building you may see ObjectBox generated code errors — run a build once so ObjectBox can generate the model classes (see https://docs.objectbox.io/getting-started#generate-objectbox-code).
 
-## Backend
-
-The `backend/` folder contains a simple PHP example (`backend/index.php`) used to accept send requests and forward them to FCM. Customize it for your infrastructure and secure it appropriately.
-
 ## MQTT Version
 
 An alternate MQTT-based implementation exists: https://github.com/ibnux/Android-SMS-Gateway-MQTT/
 
+## Troubleshooting
+
+### IDE Shows "StringConcatFactory" or "LambdaMetafactory" Errors
+These are VS Code / Eclipse Java language server issues, not code errors. The project compiles successfully from the command line with `gradlew assembleDebug`. To resolve in VS Code:
+
+1. Press `Ctrl+Shift+P` → "Java: Configure Java Runtime" and ensure a JDK 11+ is selected (the project targets Java 11; JDK 22 works).
+2. Press `Ctrl+Shift+P` → "Java: Clean Java Language Server Workspace" to reload the project.
+
+### IDE Shows "ActionLog\_ cannot be resolved" Errors
+`ActionLog_` (and other underscore-suffixed classes) are ObjectBox-generated model classes. Run `gradlew assembleDebug` from the command line once — this triggers the ObjectBox annotation processor which generates:
+- `ActionLog_.java`, `LogLine_.java`
+- `ActionLogCursor.java`, `LogLineCursor.java`, `MyObjectBox.java`
+
+These are output to `app/build/generated/ap_generated_sources/`. After building, clean the Java language server workspace (see above).
+
+### `LocalBroadcastManager` Deprecation Warnings
+These warnings appear in `LiveStreamFragment.java` and other files. `LocalBroadcastManager` is deprecated in recent AndroidX releases, but the APIs it uses remain functional on all supported Android versions. These warnings are informational and do not affect functionality.
+
 ---
-
-## Donate
-
-- paypal.me/ibnux
 
 ## License
 

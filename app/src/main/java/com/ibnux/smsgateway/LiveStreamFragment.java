@@ -7,6 +7,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -30,7 +31,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.ibnux.smsgateway.Utils.Fungsi;
 import com.ibnux.smsgateway.data.LiveLogBuffer;
 import com.ibnux.smsgateway.data.LogAdapter;
-import com.ibnux.smsgateway.data.LogLine;
 import com.ibnux.smsgateway.data.PaginationListener;
 import com.ibnux.smsgateway.layanan.BackgroundService;
 
@@ -145,7 +145,7 @@ public class LiveStreamFragment extends Fragment {
     public void checkServices() {
         Fungsi.log("checkServices");
         LocalBroadcastManager.getInstance(requireContext()).sendBroadcast(new Intent("BackgroundService"));
-        new Handler().postDelayed(new Runnable() {
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 Fungsi.log("checkServices " + serviceActive);
