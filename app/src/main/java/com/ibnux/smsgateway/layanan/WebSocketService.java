@@ -40,6 +40,7 @@ public class WebSocketService extends Service {
     private OkHttpClient client;
     private WebSocket webSocket;
     private boolean shouldReconnect = true;
+    private boolean isConnected = false;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -66,7 +67,7 @@ public class WebSocketService extends Service {
 
         isRunning = true;
         startForegroundNotification();
-        if (webSocket == null || !webSocket.isOpen()) {
+        if (!isConnected) {
             shouldReconnect = true;
             connect();
         }
@@ -128,6 +129,7 @@ public class WebSocketService extends Service {
             @Override
             public void onOpen(WebSocket ws, Response response) {
                 Log.d(TAG, "WebSocket connected");
+                isConnected = true;
                 PushService.writeLog("WEBSOCKET: Connected", WebSocketService.this);
 
                 // Send authentication handshake
@@ -209,6 +211,7 @@ public class WebSocketService extends Service {
             @Override
             public void onClosed(WebSocket ws, int code, String reason) {
                 Log.d(TAG, "WebSocket closed: " + code + " " + reason);
+                isConnected = false;
                 PushService.writeLog("WEBSOCKET: Disconnected (" + code + ")", WebSocketService.this);
                 updateNotification("WebSocket tunnel disconnected");
                 scheduleReconnect();
@@ -217,6 +220,7 @@ public class WebSocketService extends Service {
             @Override
             public void onFailure(WebSocket ws, Throwable t, Response response) {
                 Log.e(TAG, "WebSocket failure", t);
+                isConnected = false;
                 PushService.writeLog("WEBSOCKET: Connection failed: " + t.getMessage(), WebSocketService.this);
                 updateNotification("WebSocket tunnel disconnected");
                 scheduleReconnect();
@@ -238,6 +242,7 @@ public class WebSocketService extends Service {
 
     private void disconnect() {
         shouldReconnect = false;
+        isConnected = false;
         if (webSocket != null) {
             webSocket.close(1000, "User disconnected");
             webSocket = null;
