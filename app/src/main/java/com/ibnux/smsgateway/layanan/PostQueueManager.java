@@ -7,6 +7,7 @@ import com.ibnux.smsgateway.Utils.SecurityUtil;
 import java.io.BufferedWriter;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.ExecutorService;
@@ -27,8 +28,9 @@ public class PostQueueManager {
             URL url = new URL(targetUrl);
             conn = (HttpURLConnection) url.openConnection();
             
-            // Apply Timeout Setting
-            int timeoutMs = timeout * 1000;
+            // Apply Timeout Setting (clamp to minimum 1 second)
+            int safeTimeout = Math.max(1, timeout);
+            int timeoutMs = safeTimeout * 1000;
             conn.setReadTimeout(timeoutMs);
             conn.setConnectTimeout(timeoutMs);
             
@@ -50,18 +52,19 @@ public class PostQueueManager {
                         GatewayLogger.log(context, "HMAC", "HMAC_SIGN_SUCCESS: Signature added to " + targetUrl);
                     } else {
                         GatewayLogger.log(context, "HMAC", "HMAC_SIGN_FAILED: Could not generate signature for " + targetUrl);
+                        return;
                     }
                 } else {
                     GatewayLogger.log(context, "HMAC", "HMAC_KEY_MISSING: HMAC enabled but no key configured for " + targetUrl);
+                    return;
                 }
             }
 
-            OutputStream os = conn.getOutputStream();
-            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os, "UTF-8"));
-            writer.write(payload);
-            writer.flush();
-            writer.close();
-            os.close();
+            try (OutputStream os = conn.getOutputStream();
+                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8))) {
+                writer.write(payload);
+                writer.flush();
+            }
             
             int responseCode = conn.getResponseCode();
 

@@ -5,6 +5,9 @@ import android.content.SharedPreferences;
 import android.util.Base64;
 import android.util.Log;
 
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKey;
+
 import java.security.SecureRandom;
 
 import javax.crypto.Cipher;
@@ -54,14 +57,33 @@ public class SecurityUtil {
         return Base64.encodeToString(finalMessage, Base64.NO_WRAP);
     }
     
+    private static SharedPreferences getEncryptedPrefs(Context context) {
+        try {
+            MasterKey masterKey = new MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build();
+            return EncryptedSharedPreferences.create(
+                    context,
+                    "pref_encrypted",
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            );
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to create EncryptedSharedPreferences: " + e.getMessage(), e);
+            // Fallback to plain SharedPreferences to avoid crashes
+            return context.getSharedPreferences("pref", 0);
+        }
+    }
+
     public static void saveKey(Context context, String key) {
-        SharedPreferences sp = context.getSharedPreferences("pref", 0);
+        SharedPreferences sp = getEncryptedPrefs(context);
         sp.edit().putString("shared_secret_key", key).apply();
         GatewayLogger.log(context, "SECURITY", "NEW_KEY_SET: A new key was activated.");
     }
     
     public static String getSharedKey(Context context) {
-         SharedPreferences sp = context.getSharedPreferences("pref", 0);
+         SharedPreferences sp = getEncryptedPrefs(context);
          return sp.getString("shared_secret_key", null);
     }
 
@@ -75,12 +97,12 @@ public class SecurityUtil {
     }
 
     public static String getHmacKey(Context context) {
-        SharedPreferences sp = context.getSharedPreferences("pref", 0);
+        SharedPreferences sp = getEncryptedPrefs(context);
         return sp.getString("hmac_secret_key", null);
     }
 
     public static void saveHmacKey(Context context, String key) {
-        SharedPreferences sp = context.getSharedPreferences("pref", 0);
+        SharedPreferences sp = getEncryptedPrefs(context);
         sp.edit().putString("hmac_secret_key", key).apply();
         GatewayLogger.log(context, "HMAC", "HMAC_KEY_GENERATED: New HMAC key saved.");
     }

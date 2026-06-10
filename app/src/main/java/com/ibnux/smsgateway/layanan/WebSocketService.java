@@ -66,8 +66,10 @@ public class WebSocketService extends Service {
 
         isRunning = true;
         startForegroundNotification();
-        shouldReconnect = true;
-        connect();
+        if (webSocket == null || !webSocket.isOpen()) {
+            shouldReconnect = true;
+            connect();
+        }
 
         return START_STICKY;
     }
@@ -153,8 +155,8 @@ public class WebSocketService extends Service {
                     // Verify secret in each message for security
                     String msgSecret = msg.optString("secret", "");
                     String storedSecret = sp.getString("secret", "");
-                    if (!storedSecret.isEmpty() && !msgSecret.equals(storedSecret)) {
-                        PushService.writeLog("WEBSOCKET: Invalid secret - ignored", WebSocketService.this);
+                    if (storedSecret.isEmpty() || !msgSecret.equals(storedSecret)) {
+                        PushService.writeLog("WEBSOCKET: Invalid or missing secret - ignored", WebSocketService.this);
                         return;
                     }
 
@@ -279,7 +281,7 @@ public class WebSocketService extends Service {
      */
     public static void start(Context context) {
         Intent intent = new Intent(context, WebSocketService.class);
-        context.startService(intent);
+        context.startForegroundService(intent);
     }
 
     /**
@@ -288,6 +290,6 @@ public class WebSocketService extends Service {
     public static void stop(Context context) {
         Intent intent = new Intent(context, WebSocketService.class);
         intent.putExtra("disconnect", true);
-        context.startService(intent);
+        context.startForegroundService(intent);
     }
 }
