@@ -72,6 +72,24 @@ When building you may see ObjectBox generated code errors — run a build once s
 
 An alternate MQTT-based implementation exists: https://github.com/ibnux/Android-SMS-Gateway-MQTT/
 
+## Troubleshooting
+
+### IDE Shows "StringConcatFactory" or "LambdaMetafactory" Errors
+These are VS Code / Eclipse Java language server issues, not code errors. The project compiles successfully from the command line with `gradlew assembleDebug`. To resolve in VS Code:
+
+1. Press `Ctrl+Shift+P` → "Java: Configure Java Runtime" and ensure a JDK 11+ is selected (the project targets Java 11; JDK 22 works).
+2. Press `Ctrl+Shift+P` → "Java: Clean Java Language Server Workspace" to reload the project.
+
+### IDE Shows "ActionLog\_ cannot be resolved" Errors
+`ActionLog_` (and other underscore-suffixed classes) are ObjectBox-generated model classes. Run `gradlew assembleDebug` from the command line once — this triggers the ObjectBox annotation processor which generates:
+- `ActionLog_.java`, `LogLine_.java`
+- `ActionLogCursor.java`, `LogLineCursor.java`, `MyObjectBox.java`
+
+These are output to `app/build/generated/ap_generated_sources/`. After building, clean the Java language server workspace (see above).
+
+### `LocalBroadcastManager` Deprecation Warnings
+These warnings appear in `LiveStreamFragment.java` and other files. `LocalBroadcastManager` is deprecated in recent AndroidX releases, but the APIs it uses remain functional on all supported Android versions. These warnings are informational and do not affect functionality.
+
 ---
 
 ## License
