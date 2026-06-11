@@ -75,11 +75,21 @@ public class UssdService extends AccessibilityService {
         Fungsi.log(TAG, text);
         if(PushService.current!=null){
             PushService.writeLog("USSD Received: " + text, this);
-            SmsListener.sendPOST(getSharedPreferences("pref", 0).getString("urlPost", null),
+            String url = getSharedPreferences("pref", 0).getString("urlUssd", null);
+            if(url == null || url.isEmpty()) {
+                // Fallback to legacy URL if USSD URL not set
+                url = getSharedPreferences("pref", 0).getString("urlPost", null);
+            }
+            SmsListener.sendPOST(url,
                     PushService.current.to+PushService.current.sim, text, "ussd", this, String.valueOf(System.currentTimeMillis()));
         }else {
             PushService.writeLog("USSD Received: " + text, this);
-            SmsListener.sendPOST(getSharedPreferences("pref", 0).getString("urlPost", null),
+            String url = getSharedPreferences("pref", 0).getString("urlUssd", null);
+            if(url == null || url.isEmpty()) {
+                // Fallback to legacy URL if USSD URL not set
+                url = getSharedPreferences("pref", 0).getString("urlPost", null);
+            }
+            SmsListener.sendPOST(url,
                     "ussd", text, "ussd", this, String.valueOf(System.currentTimeMillis()));
         }
         PushService.runUssd();

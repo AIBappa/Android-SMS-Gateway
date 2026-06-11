@@ -11,6 +11,11 @@ import android.provider.Telephony;
 import android.telephony.SmsMessage;
 import android.util.Log;
 
+import com.ibnux.smsgateway.Utils.GatewayLogger;
+import com.ibnux.smsgateway.Utils.SecurityUtil;
+
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.InputStreamReader;
@@ -28,101 +33,155 @@ public class SmsListener extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         if(sp==null)sp = context.getSharedPreferences("pref",0);
-        String url = sp.getString("urlPost",null);
-        if (Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(intent.getAction())) {
+        
+        if (Telephony.Sms.Intents.SMS_DELIVER_ACTION.equals(intent.getAction())) {
             for (SmsMessage smsMessage : Telephony.Sms.Intents.getMessagesFromIntent(intent)) {
                 String messageFrom = smsMessage.getOriginatingAddress();
                 String messageBody = smsMessage.getMessageBody();
                 String messageTimestamp = smsMessage.getTimestampMillis()+"";
                 Log.i("SMS From", messageFrom);
                 Log.i("SMS Body", messageBody);
+                // RAM-only Log for Live Stream
                 writeLog("SMS: RECEIVED : " + messageFrom + " " + messageBody,context);
-                if(url!=null){
-                    if(sp.getBoolean("gateway_on",true)) {
-                        sendPOST(url, messageFrom, messageBody,"received",context,messageTimestamp);
-                    }else{
-                        writeLog("GATEWAY OFF: SMS NOT POSTED TO SERVER", context);
-                    }
-
-                }else{
-                    Log.i("SMS URL", "URL not SET");
-                }
-            }
-        }
-    }
-
-    static class postDataTask extends AsyncTask<String, Void, String> {
-
-        private Exception exception;
-
-        protected String doInBackground(String... datas) {
-            URL url;
-            String response = "";
-            try {
+                
+                // Construct Base JSON Payload
+                JSONObject jsonPayload = new JSONObject();
                 try {
-                    url = new URL(datas[0]);
-
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setReadTimeout(15000);
-                    conn.setConnectTimeout(15000);
-                    conn.setRequestMethod("POST");
-                    conn.setDoInput(true);
-                    conn.setDoOutput(true);
-
-                    OutputStream os = conn.getOutputStream();
-                    BufferedWriter writer = new BufferedWriter(
-                            new OutputStreamWriter(os, "UTF-8"));
-                    writer.write(datas[1]);
-
-                    writer.flush();
-                    writer.close();
-                    os.close();
-                    int responseCode=conn.getResponseCode();
-
-                    if (responseCode == HttpsURLConnection.HTTP_OK) {
-                        String line;
-                        BufferedReader br=new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                        while ((line=br.readLine()) != null) {
-                            response+=line;
-                        }
-                    }
-                    else {
-                        response="";
-
-                    }
+                    jsonPayload.put("from", messageFrom);
+                    jsonPayload.put("message", messageBody);
+                    jsonPayload.put("type", "received");
+                    jsonPayload.put("timestamp", messageTimestamp);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+                
+                int timeout = sp.getInt("network_timeout", 15);
+                boolean logSuccess = sp.getBoolean("log_post_success", false);
 
-                return "SMS: POST : "+datas[0]+" : "+response;
-            }catch (Exception e){
-                e.printStackTrace();
-                return "SMS: POST FAILED : "+datas[0]+" : "+e.getMessage();
+                // Stream B (Backup) - Gatekeeper & Dispatcher
+                if (sp.getBoolean("enable_stream_b", false)) {
+                    String backupUrl = sp.getString("backup_url", null);
+                    if (backupUrl != null && !backupUrl.isEmpty() && backupUrl.startsWith("http")) {
+                         // Backup sends raw JSON, unencrypted
+                         PostQueueManager.enqueue(context, backupUrl, jsonPayload.toString(), "application/json", logSuccess, timeout);
+                    }
+                }
+
+                // Filters
+                boolean passedFilters = true;
+                
+                // Filter Country Code
+                if(sp.getBoolean("filter_country_enabled", false)){
+                    boolean match = false;
+                    String countryList = sp.getString("filter_country_list", "");
+                    if(!countryList.isEmpty()){
+                        String[] codes = countryList.split(",");
+                        for(String code : codes){
+                            if(!code.trim().isEmpty() && messageFrom.startsWith(code.trim())){
+                                match = true;
+                                break;
+                            }
+                        }
+                    }
+                    if(!match) passedFilters = false;
+                }
+                
+                // Filter Prefix
+                if(passedFilters && sp.getBoolean("filter_prefix_enabled", false)){
+                    boolean match = false;
+                    String prefixList = sp.getString("filter_prefix_list", "");
+                    if(!prefixList.isEmpty()){
+                        String[] prefixes = prefixList.split(",");
+                        for(String prefix : prefixes){
+                            if(!prefix.trim().isEmpty() && messageBody.startsWith(prefix.trim())){
+                                match = true;
+                                break;
+                            }
+                        }
+                    }
+                    if(!match) passedFilters = false;
+                }
+                
+                // Filter Length
+                if(passedFilters && sp.getBoolean("filter_length_enabled", false)){
+                    boolean match = false;
+                    String lengthList = sp.getString("filter_length_list", "");
+                    if(!lengthList.isEmpty()){
+                        String[] lengths = lengthList.split(",");
+                        for(String len : lengths){
+                            try{
+                                if(!len.trim().isEmpty() && messageBody.length() == Integer.parseInt(len.trim())){
+                                    match = true;
+                                    break;
+                                }
+                            }catch(Exception e){}
+                        }
+                    }
+                    if(!match) passedFilters = false;
+                }
+
+                // Stream A (Primary) - Gatekeeper & Dispatcher
+                if(sp.getBoolean("gateway_on",true)) {
+                    if(passedFilters) {
+                        if (sp.getBoolean("enable_stream_a", true)) {
+                            String url = sp.getString("urlPost", null);
+                            if(url!=null) {
+                                // Delegate to sendPOST which handles Encryption logic
+                                sendPOST(url, messageFrom, messageBody, "received", context, messageTimestamp);
+                            }
+                        }
+                    }
+                    else
+                        writeLog("SMS: FILTERED : " + messageFrom + " " + messageBody,context);
+                } else {
+                    writeLog("GATEWAY OFF: SMS NOT POSTED TO SERVER", context);
+                }
             }
         }
-
-        @Override
-        protected void onPostExecute(String response) {
-            writeLog(response,null);
-        }
     }
-
 
     public static void sendPOST(String urlPost,String from, String msg,String tipe, Context context, String msgTimestamp){
         if(urlPost==null) return;
-        if(from.isEmpty()) return;
+        if(from == null) from = "";
         if(!urlPost.startsWith("http")) return;
+        
+        SharedPreferences sp = context.getSharedPreferences("pref", 0);
+        int timeout = sp.getInt("network_timeout", 15);
+        boolean logSuccess = sp.getBoolean("log_post_success", false);
+        boolean encrypt = sp.getBoolean("enable_encryption", false);
+        
         try {
-            new postDataTask().execute(urlPost,
-                    "number="+URLEncoder.encode(from, "UTF-8")+
-                            "&message="+URLEncoder.encode(msg, "UTF-8")+
-                            "&type=" + URLEncoder.encode(tipe, "UTF-8") +
-                            "&timestamp=" + URLEncoder.encode(msgTimestamp, "UTF-8")
-            );
-        }catch (Exception e){
+            JSONObject json = new JSONObject();
+            json.put("from", from);
+            json.put("message", msg);
+            json.put("type", tipe);
+            json.put("timestamp", msgTimestamp);
+            
+            String finalPayload;
+            
+            if (encrypt) {
+                String key = SecurityUtil.getSharedKey(context);
+                if (key != null) {
+                    JSONObject wrapper = new JSONObject();
+                    wrapper.put("payload", SecurityUtil.encrypt(json.toString(), key));
+                    wrapper.put("is_encrypted", true);
+                    finalPayload = wrapper.toString();
+                } else {
+                    // Fallback if key missing but encryption enabled
+                    json.put("is_encrypted", false);
+                    finalPayload = json.toString();
+                }
+            } else {
+                json.put("is_encrypted", false);
+                finalPayload = json.toString();
+            }
+            
+            PostQueueManager.enqueue(context, urlPost, finalPayload, "application/json", logSuccess, timeout);
+            
+        } catch (Exception e) {
             e.printStackTrace();
-            writeLog("SMS: POST FAILED : "+urlPost+" : "+e.getMessage(),context);
+            writeLog("SMS: POST ERROR : " + e.getMessage(), context);
         }
     }
-
 }
+
