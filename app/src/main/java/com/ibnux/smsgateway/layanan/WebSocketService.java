@@ -40,6 +40,7 @@ public class WebSocketService extends Service {
     private OkHttpClient client;
     private WebSocket webSocket;
     private boolean shouldReconnect = true;
+    private boolean isConnected = false;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -66,8 +67,10 @@ public class WebSocketService extends Service {
 
         isRunning = true;
         startForegroundNotification();
-        shouldReconnect = true;
-        connect();
+        if (!isConnected) {
+            shouldReconnect = true;
+            connect();
+        }
 
         return START_STICKY;
     }
@@ -126,6 +129,7 @@ public class WebSocketService extends Service {
             @Override
             public void onOpen(WebSocket ws, Response response) {
                 Log.d(TAG, "WebSocket connected");
+                isConnected = true;
                 PushService.writeLog("WEBSOCKET: Connected", WebSocketService.this);
 
                 // Send authentication handshake
@@ -153,8 +157,8 @@ public class WebSocketService extends Service {
                     // Verify secret in each message for security
                     String msgSecret = msg.optString("secret", "");
                     String storedSecret = sp.getString("secret", "");
-                    if (!storedSecret.isEmpty() && !msgSecret.equals(storedSecret)) {
-                        PushService.writeLog("WEBSOCKET: Invalid secret - ignored", WebSocketService.this);
+                    if (storedSecret.isEmpty() || !msgSecret.equals(storedSecret)) {
+                        PushService.writeLog("WEBSOCKET: Invalid or missing secret - ignored", WebSocketService.this);
                         return;
                     }
 
@@ -207,6 +211,7 @@ public class WebSocketService extends Service {
             @Override
             public void onClosed(WebSocket ws, int code, String reason) {
                 Log.d(TAG, "WebSocket closed: " + code + " " + reason);
+                isConnected = false;
                 PushService.writeLog("WEBSOCKET: Disconnected (" + code + ")", WebSocketService.this);
                 updateNotification("WebSocket tunnel disconnected");
                 scheduleReconnect();
@@ -215,6 +220,7 @@ public class WebSocketService extends Service {
             @Override
             public void onFailure(WebSocket ws, Throwable t, Response response) {
                 Log.e(TAG, "WebSocket failure", t);
+                isConnected = false;
                 PushService.writeLog("WEBSOCKET: Connection failed: " + t.getMessage(), WebSocketService.this);
                 updateNotification("WebSocket tunnel disconnected");
                 scheduleReconnect();
@@ -236,6 +242,7 @@ public class WebSocketService extends Service {
 
     private void disconnect() {
         shouldReconnect = false;
+        isConnected = false;
         if (webSocket != null) {
             webSocket.close(1000, "User disconnected");
             webSocket = null;
@@ -279,7 +286,7 @@ public class WebSocketService extends Service {
      */
     public static void start(Context context) {
         Intent intent = new Intent(context, WebSocketService.class);
-        context.startService(intent);
+        context.startForegroundService(intent);
     }
 
     /**
@@ -288,6 +295,6 @@ public class WebSocketService extends Service {
     public static void stop(Context context) {
         Intent intent = new Intent(context, WebSocketService.class);
         intent.putExtra("disconnect", true);
-        context.startService(intent);
+        context.startForegroundService(intent);
     }
 }
