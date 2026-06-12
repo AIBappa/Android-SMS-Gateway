@@ -95,7 +95,7 @@ paths:
         **HMAC-SHA256 Signature (Optional)**
         - When "Enable HMAC Signing" is toggled on in the Android app, every POST request includes an `X-Signature` header.
         - **Algorithm**: HMAC-SHA256 using a 256-bit key.
-        - **Header**: `X-Signature: <Base64-encoded HMAC-SHA256 digest of the raw request body>`
+        - **Header**: `X-signature: <Base64-encoded HMAC-SHA256 digest of the raw request body>`
         - **Verification**: The backend recomputes the HMAC using its configured key and compares with `hash_equals()`. A mismatch returns 403 Forbidden.
         - **Backward Compatible**: When HMAC signing is disabled on the app, no header is sent and the backend processes requests normally (when `$hmac_signing_enabled` is `false`).
       operationId: receivePrimarySms
@@ -131,7 +131,7 @@ paths:
         '500':
           description: Server Error
       headers:
-        X-Signature:
+        X-signature:
           description: HMAC-SHA256 signature of the raw request body (Base64). Required when HMAC signing is enabled.
           schema:
             type: string
@@ -142,7 +142,7 @@ paths:
       summary: USSD Receiver Endpoint
       description: |
         Receives USSD responses (e.g., balance check results) from the device.
-        This endpoint is separate from the SMS receiver and typically receives unencrypted data unless updated otherwise.
+        This endpoint receives JSON payloads via the same `SmsListener.sendPOST()` method used for Primary SMS forwarding.
         
         **Key Files:**
         - **Trigger (USSD)**: `app/src/main/java/com/ibnux/smsgateway/layanan/UssdService.java` (Captures USSD dialogs, sends response)
@@ -154,11 +154,11 @@ paths:
       requestBody:
         required: true
         content:
-          application/x-www-form-urlencoded:
+          application/json:
             schema:
               type: object
               properties:
-                number:
+                from:
                   type: string
                   description: Sender number or "ussd" (often includes SIM info like "*888#1").
                 message:
@@ -171,6 +171,11 @@ paths:
                 timestamp:
                   type: string
                   description: Timestamp in milliseconds.
+              example:
+                from: "*888#1"
+                message: "Your balance is $10.00"
+                type: "ussd"
+                timestamp: "1678886400000"
       responses:
         '200':
           description: USSD received successfully
