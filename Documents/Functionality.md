@@ -33,6 +33,8 @@ This Android SMS Gateway application acts as a bridge between SMS/USSD networks 
 ### 3. Bifurcated Data Streams
 The application implements a bifurcated data engine to handle SMS forwarding:
 
+> **⚠️ Important:** The app uses the Primary Receiver URL and Backup URL **exactly as configured** in Settings — it does **NOT** automatically append any path suffix. For example, if you set the Backup URL to `https://x.com`, the app will POST directly to `https://x.com` (not to `https://x.com/api/sms/backup`). The paths shown in the API documentation (e.g., `/api/sms/receive`, `/api/sms/backup`) are **suggested server endpoint paths** that you should include in your full URL when configuring the app.
+
 *   **Stream A (Primary)**:
     *   **Target**: `Receiver URL`.
     *   **Purpose**: Secure, filtered transaction processing.
@@ -167,6 +169,14 @@ Content-Type: application/json
 }
 ```
 *Note: Backup stream always sends raw/unencrypted JSON and bypasses all filters.*
+> **⚠️ Important:** The Backup URL is used verbatim from Settings. If your server expects requests at `https://x.com/api/sms/backup`, you must enter the **complete URL** `https://x.com/api/sms/backup` in the Backup URL field — the app does not append any path automatically.
+
+## Important URL Usage Note
+The Primary Receiver URL and Backup URL fields in the app's Settings are used **exactly as entered** — no path, query parameter, or suffix is appended automatically. The endpoint paths listed below (e.g., `/api/sms/receive`, `/api/sms/backup`) are suggestions for your server implementation. When configuring the app, you must provide the **full URL** including any path segments.
+
+For example, to use the suggested endpoints:
+- **Primary URL**: `https://your-server.com/api/sms/receive`
+- **Backup URL**: `https://your-server.com/api/sms/backup`
 
 ## Curl Test Examples
 
