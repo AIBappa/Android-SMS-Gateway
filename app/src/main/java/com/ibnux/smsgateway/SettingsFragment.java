@@ -780,15 +780,17 @@ public class SettingsFragment extends Fragment {
 
         Button btnEdit = new Button(ctx);
         btnEdit.setText("\u270E");
+
+        Button btnSave = new Button(ctx);
+        btnSave.setText("Save");
+        btnSave.setVisibility(View.GONE);
+
         btnEdit.setOnClickListener(v -> {
             setFieldLocked(et, false);
             btnEdit.setVisibility(View.GONE);
             btnSave.setVisibility(View.VISIBLE);
         });
 
-        Button btnSave = new Button(ctx);
-        btnSave.setText("Save");
-        btnSave.setVisibility(View.GONE);
         btnSave.setOnClickListener(v -> {
             listener.onSave(et.getText().toString());
             setFieldLocked(et, true);
@@ -825,15 +827,17 @@ public class SettingsFragment extends Fragment {
 
         Button btnEdit = new Button(ctx);
         btnEdit.setText("\u270E");
+
+        Button btnSave = new Button(ctx);
+        btnSave.setText("Save");
+        btnSave.setVisibility(View.GONE);
+
         btnEdit.setOnClickListener(v -> {
             setFieldLocked(et, false);
             btnEdit.setVisibility(View.GONE);
             btnSave.setVisibility(View.VISIBLE);
         });
 
-        Button btnSave = new Button(ctx);
-        btnSave.setText("Save");
-        btnSave.setVisibility(View.GONE);
         btnSave.setOnClickListener(v -> {
             listener.onSave(et.getText().toString());
             setFieldLocked(et, true);
@@ -872,6 +876,17 @@ public class SettingsFragment extends Fragment {
 
         Button btnEdit = new Button(ctx);
         btnEdit.setText("\u270E");
+
+        Button btnSave = new Button(ctx);
+        btnSave.setText("Save");
+        btnSave.setVisibility(View.GONE);
+
+        Button btnGenerate = new Button(ctx);
+        btnGenerate.setText("Generate");
+
+        Button btnCopy = new Button(ctx);
+        btnCopy.setText("Copy");
+
         btnEdit.setOnClickListener(v -> {
             setFieldLocked(et, false);
             btnEdit.setVisibility(View.GONE);
@@ -880,9 +895,6 @@ public class SettingsFragment extends Fragment {
             btnSave.setVisibility(View.VISIBLE);
         });
 
-        Button btnSave = new Button(ctx);
-        btnSave.setText("Save");
-        btnSave.setVisibility(View.GONE);
         btnSave.setOnClickListener(v -> {
             String val = et.getText().toString();
             if(!val.isEmpty()) {
@@ -896,8 +908,6 @@ public class SettingsFragment extends Fragment {
             }
         });
 
-        Button btnGenerate = new Button(ctx);
-        btnGenerate.setText("Generate");
         btnGenerate.setOnClickListener(v -> {
             showGenerateConfirmationDialog(ctx, generateItemName, () -> {
                 String newValue = generateAction.generate();
@@ -912,8 +922,6 @@ public class SettingsFragment extends Fragment {
             });
         });
 
-        Button btnCopy = new Button(ctx);
-        btnCopy.setText("Copy");
         btnCopy.setOnClickListener(v -> {
             String activeValue = copyAction.getCopyValue();
             if(activeValue != null) {
