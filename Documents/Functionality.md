@@ -18,17 +18,22 @@ This Android SMS Gateway application acts as a bridge between SMS/USSD networks 
 #### A. AES-GCM Encryption (Payload)
 *   **Algorithm**: AES/GCM/NoPadding, 256-bit key.
 *   **Format**: Base64(IV + CipherText + Tag), where IV is 12 bytes.
-*   Optional encryption for the Primary Stream.
-    *   If Enabled: Sends `{ "payload": "ENCRYPTED_DATA", "is_encrypted": true }`.
-    *   If Disabled: Sends raw JSON `{ ..., "is_encrypted": false }`.
-*   **Key Management**: Built-in Key Generator (256-bit Base64) with View/Copy/Save capabilities. Keys are stored in `EncryptedSharedPreferences`.
+*   Optional encryption for the **Primary Stream (Stream A)** only.
+    *   If Enabled: Sends `{ "payload": "ENCRYPTED_DATA" }`.
+    *   If Disabled: Sends raw JSON payload.
+*   **Key Management**: Built-in Key Generator (256-bit Base64) with Generate/Save/Copy capabilities. Keys are stored in `EncryptedSharedPreferences`. Editable text field allows manual key entry.
 
 #### B. HMAC-SHA256 Signing (Webhook Signature)
 *   **Algorithm**: HMAC-SHA256 using a 256-bit key.
 *   **Header**: `X-signature: <Base64-encoded HMAC-SHA256 digest of the raw request body>`
-*   Optional signing applied to **all** HTTP POST requests (both Primary and Backup streams) when toggled on in Settings.
-*   **Key Management**: Separate HMAC 256-bit Base64 key with Generate/Copy/Save capabilities. Keys stored in `EncryptedSharedPreferences`.
+*   Optional signing applied to **Primary Stream (Stream A)** only when toggled on in Settings.
+*   **Key Management**: Separate HMAC 256-bit Base64 key with Generate/Save/Copy capabilities. Keys stored in `EncryptedSharedPreferences`. Editable text field allows manual key entry.
 *   **Behavior**: If signing is enabled but the HMAC key is missing or signing fails, the POST is aborted (not sent).
+
+#### C. Bearer Token Authentication
+*   **Header**: `Authorization: Bearer <token>`
+*   Optional authentication for both **Primary Stream (Stream A)** and **Backup Stream (Stream B)**.
+*   **Token Management**: Separate tokens per stream with Generate/Save/Copy capabilities. Tokens stored in `EncryptedSharedPreferences`. Editable text field allows manual token entry.
 
 ### 3. Bifurcated Data Streams
 The application implements a bifurcated data engine to handle SMS forwarding:
@@ -39,8 +44,9 @@ The application implements a bifurcated data engine to handle SMS forwarding:
     *   **Target**: `Receiver URL`.
     *   **Purpose**: Secure, filtered transaction processing.
     *   **Features**:
-        *   Supports AES-GCM Encryption
+        *   Supports Bearer Token Authentication
         *   Supports HMAC-SHA256 Signing
+        *   Supports AES-GCM Encryption
         *   Supports Filters (Country Code, Message Prefix, Message Length)
     *   **Logging**: Failures log to System Log; Successes log to Live Stream (RAM) (when "Log Successful POSTs" is enabled).
 
@@ -49,8 +55,9 @@ The application implements a bifurcated data engine to handle SMS forwarding:
     *   **Purpose**: Raw data archival / Catch-all.
     *   **Features**:
         *   Sends raw, unencrypted JSON.
-        *   Bypasses all filters.
-        *   Supports HMAC-SHA256 Signing (shared with Stream A).
+        *   Supports Bearer Token Authentication.
+        *   Bypasses all filters by default.
+        *   Optional filter checkbox in Settings to also apply filters to Stream B.
     *   **Logging**: Failures log to System Log (via `BackupSendService`); Successes are intentionally not logged.
 
 ### 4. Logging System
@@ -115,10 +122,12 @@ The application maintains three distinct log types, accessible via the UI:
 ### Tab 2: Settings
 *   **Push & USSD Messaging**: Secret ID, Device ID (FCM Token), USSD Test/Permissions, Push URL (FCM endpoint), Request Expiry, WebSocket Tunnel URL/Toggle.
 *   **SMS Webhook**:
-    *   **Security & Encryption**: Enable Encryption toggle (AES-GCM), Key Management (Generate/View/Copy/Save).
-    *   **Webhook Signature (HMAC-SHA256)**: Enable HMAC Signing toggle, Key Management (Generate/Copy/Save).
     *   **Dispatcher & Gatekeeper**: Network Timeout, Primary URL Toggle & Input, Backup URL Toggle & Input.
-    *   **Filters**: Country Code (multi-select dialog), Message Prefix, Message Length.
+    *   **Stream A: Bearer Token**: Toggle, editable token field, Generate/Save/Copy buttons.
+    *   **Stream A: HMAC-SHA256 Signing**: Toggle, editable key field, Generate/Save/Copy buttons.
+    *   **Stream A: AES-GCM Encryption**: Toggle, editable key field, Generate/Save/Copy buttons.
+    *   **Stream B: Bearer Token**: Toggle, editable token field, Generate/Save/Copy buttons.
+    *   **Filters**: Country Code (multi-select dialog), Message Prefix, Message Length, and "Also apply to Stream B" checkbox.
 *   **Unified & System Logs**:
     *   **Audit Log**: View user actions (Paginated, 50/page), Share Page, Clear DB.
     *   **System Log**: View failures (Paginated, 50/page), Share File, Clear File.
@@ -146,13 +155,16 @@ Host: your-server.com
 Content-Type: application/json
 
 {
-  "is_encrypted": true,
   "payload": "VGhpcyBpcyBhbiBleGFtcGxlIGVuY3J5cHRlZCBwYXlsb2Fk..."
 }
 ```
-**With HMAC-SHA256 Signing Enabled (Header added to all requests):**
+**With HMAC-SHA256 Signing Enabled (Header added to requests):**
 ```
 X-signature: <Base64 HMAC-SHA256 digest of the request body>
+```
+**With Bearer Token Enabled (Header added to requests):**
+```
+Authorization: Bearer <token>
 ```
 
 ### Stream B (Backup) — POST to Backup URL
@@ -168,7 +180,7 @@ Content-Type: application/json
   "timestamp": "1678886400000"
 }
 ```
-*Note: Backup stream always sends raw/unencrypted JSON and bypasses all filters.*
+*Note: Backup stream always sends raw/unencrypted JSON and bypasses all filters by default. Filters can optionally be applied to Stream B via the "Also apply filters to Stream B" checkbox in Settings.*
 > **⚠️ Important:** The Backup URL is used verbatim from Settings. If your server expects requests at `https://x.com/api/sms/backup`, you must enter the **complete URL** `https://x.com/api/sms/backup` in the Backup URL field — the app does not append any path automatically.
 
 ## Important URL Usage Note
@@ -185,7 +197,6 @@ For example, to use the suggested endpoints:
 curl -X POST https://your-server.com/api/sms/receive \
   -H "Content-Type: application/json" \
   -d '{
-    "is_encrypted": false,
     "from": "+1234567890",
     "message": "Test SMS from curl",
     "type": "received",
@@ -198,7 +209,6 @@ curl -X POST https://your-server.com/api/sms/receive \
 curl -X POST https://your-server.com/api/sms/receive \
   -H "Content-Type: application/json" \
   -d '{
-    "is_encrypted": true,
     "payload": "BASE64_ENCODED_IV_CIPHERTEXT_TAG"
   }'
 ```
@@ -212,7 +222,6 @@ curl -X POST https://your-server.com/api/sms/receive \
   -H "Content-Type: application/json" \
   -H "X-signature: GENERATED_HMAC_SIGNATURE" \
   -d '{
-    "is_encrypted": false,
     "from": "+1234567890",
     "message": "Test SMS with HMAC",
     "type": "received",
@@ -220,7 +229,20 @@ curl -X POST https://your-server.com/api/sms/receive \
   }'
 ```
 
-### 4. Backup Receiver (Stream B)
+### 4. Primary Receiver (Stream A) — With Bearer Token
+```bash
+curl -X POST https://your-server.com/api/sms/receive \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "from": "+1234567890",
+    "message": "Test SMS with Bearer",
+    "type": "received",
+    "timestamp": "1678886400000"
+  }'
+```
+
+### 5. Backup Receiver (Stream B)
 ```bash
 curl -X POST https://your-server.com/api/sms/backup \
   -H "Content-Type: application/json" \
@@ -232,7 +254,20 @@ curl -X POST https://your-server.com/api/sms/backup \
   }'
 ```
 
-### 5. USSD Response Receiver
+### 6. Backup Receiver (Stream B) — With Bearer Token
+```bash
+curl -X POST https://your-server.com/api/sms/backup \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "from": "+1234567890",
+    "message": "Test SMS to backup stream",
+    "type": "received",
+    "timestamp": "1678886400000"
+  }'
+```
+
+### 7. USSD Response Receiver
 ```bash
 curl -X POST https://your-server.com/api/sms/ussd \
   -H "Content-Type: application/json" \
@@ -245,7 +280,7 @@ curl -X POST https://your-server.com/api/sms/ussd \
 ```
 *Note: The `from` field may include SIM info (e.g., `*888#1`).*
 
-### 6. Send SMS / Initiate USSD (Server → Device via FCM)
+### 8. Send SMS / Initiate USSD (Server → Device via FCM)
 ```bash
 curl -X POST https://your-server.com/api/sms/send \
   -d "to=+1234567890" \

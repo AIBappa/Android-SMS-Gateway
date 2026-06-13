@@ -9,6 +9,7 @@ import androidx.security.crypto.EncryptedSharedPreferences;
 import androidx.security.crypto.MasterKey;
 
 import java.security.SecureRandom;
+import java.util.UUID;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -79,7 +80,7 @@ public class SecurityUtil {
     public static void saveKey(Context context, String key) {
         SharedPreferences sp = getEncryptedPrefs(context);
         sp.edit().putString("shared_secret_key", key).apply();
-        GatewayLogger.log(context, "SECURITY", "NEW_KEY_SET: A new key was activated.");
+        GatewayLogger.log(context, "SECURITY", "NEW_KEY_SET: A new AES key was activated.");
     }
     
     public static String getSharedKey(Context context) {
@@ -87,7 +88,7 @@ public class SecurityUtil {
          return sp.getString("shared_secret_key", null);
     }
 
-    // --- HMAC-SHA256 Signing Methods ---
+    // --- HMAC-SHA256 Signing Methods (Stream A) ---
 
     public static String generateHmacKey() {
         SecureRandom secureRandom = new SecureRandom();
@@ -104,7 +105,7 @@ public class SecurityUtil {
     public static void saveHmacKey(Context context, String key) {
         SharedPreferences sp = getEncryptedPrefs(context);
         sp.edit().putString("hmac_secret_key", key).apply();
-        GatewayLogger.log(context, "HMAC", "HMAC_KEY_GENERATED: New HMAC key saved.");
+        GatewayLogger.log(context, "HMAC", "HMAC_KEY_SAVED: New HMAC key saved for Stream A.");
     }
 
     public static String signPayload(String payload, String hmacKey) {
@@ -119,5 +120,35 @@ public class SecurityUtil {
             Log.e(TAG, "HMAC signing failed: " + e.getMessage(), e);
             return null;
         }
+    }
+
+    // --- Bearer Token Methods (Stream A) ---
+
+    public static String generateBearerToken() {
+        return UUID.randomUUID().toString() + "." + UUID.randomUUID().toString();
+    }
+
+    public static String getBearerToken(Context context) {
+        SharedPreferences sp = getEncryptedPrefs(context);
+        return sp.getString("bearer_token_a", null);
+    }
+
+    public static void saveBearerToken(Context context, String token) {
+        SharedPreferences sp = getEncryptedPrefs(context);
+        sp.edit().putString("bearer_token_a", token).apply();
+        GatewayLogger.log(context, "SECURITY", "BEARER_TOKEN_SAVED: New Bearer token saved for Stream A.");
+    }
+
+    // --- Bearer Token Methods (Stream B) ---
+
+    public static String getBearerTokenStreamB(Context context) {
+        SharedPreferences sp = getEncryptedPrefs(context);
+        return sp.getString("bearer_token_b", null);
+    }
+
+    public static void saveBearerTokenStreamB(Context context, String token) {
+        SharedPreferences sp = getEncryptedPrefs(context);
+        sp.edit().putString("bearer_token_b", token).apply();
+        GatewayLogger.log(context, "SECURITY", "BEARER_TOKEN_SAVED: New Bearer token saved for Stream B.");
     }
 }

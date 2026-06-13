@@ -1,7 +1,6 @@
 package com.ibnux.smsgateway.layanan;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import com.ibnux.smsgateway.Utils.GatewayLogger;
 import com.ibnux.smsgateway.Utils.SecurityUtil;
 import java.io.BufferedWriter;
@@ -16,13 +15,25 @@ import java.util.concurrent.Executors;
 public class PostQueueManager {
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
 
+    // Legacy method for backward compatibility
     public static void enqueue(Context context, String url, String payload, String contentType, boolean logSuccess, int timeout) {
+        enqueue(context, url, payload, contentType, logSuccess, timeout, null, null);
+    }
+
+    // New method with bearer token and HMAC key support
+    public static void enqueue(Context context, String url, String payload, String contentType, boolean logSuccess, int timeout, String bearerToken, String hmacKey) {
+        final String finalBearerToken = bearerToken;
+        final String finalHmacKey = hmacKey;
         executor.execute(() -> {
-            postData(context, url, payload, contentType, logSuccess, timeout);
+            postData(context, url, payload, contentType, logSuccess, timeout, finalBearerToken, finalHmacKey);
         });
     }
 
     private static void postData(Context context, String targetUrl, String payload, String contentType, boolean logSuccess, int timeout) {
+        postData(context, targetUrl, payload, contentType, logSuccess, timeout, null, null);
+    }
+
+    private static void postData(Context context, String targetUrl, String payload, String contentType, boolean logSuccess, int timeout, String bearerToken, String hmacKey) {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(targetUrl);
@@ -41,21 +52,19 @@ public class PostQueueManager {
                 conn.setRequestProperty("Content-Type", contentType);
             }
 
-            // HMAC-SHA256 Signing
-            boolean hmacEnabled = context.getSharedPreferences("pref", 0).getBoolean("enable_hmac_signing", false);
-            if (hmacEnabled) {
-                String hmacKey = SecurityUtil.getHmacKey(context);
-                if (hmacKey != null && !hmacKey.isEmpty()) {
-                    String signature = SecurityUtil.signPayload(payload, hmacKey);
-                    if (signature != null) {
-                        conn.setRequestProperty("X-signature", signature);
-                        GatewayLogger.log(context, "HMAC", "HMAC_SIGN_SUCCESS: Signature added to " + targetUrl);
-                    } else {
-                        GatewayLogger.log(context, "HMAC", "HMAC_SIGN_FAILED: Could not generate signature for " + targetUrl);
-                        return;
-                    }
+            // Bearer Token Authentication
+            if (bearerToken != null && !bearerToken.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
+            }
+
+            // HMAC-SHA256 Signing (per-stream)
+            if (hmacKey != null && !hmacKey.isEmpty()) {
+                String signature = SecurityUtil.signPayload(payload, hmacKey);
+                if (signature != null) {
+                    conn.setRequestProperty("X-signature", signature);
+                    GatewayLogger.log(context, "HMAC", "HMAC_SIGN_SUCCESS: Signature added to " + targetUrl);
                 } else {
-                    GatewayLogger.log(context, "HMAC", "HMAC_KEY_MISSING: HMAC enabled but no key configured for " + targetUrl);
+                    GatewayLogger.log(context, "HMAC", "HMAC_SIGN_FAILED: Could not generate signature for " + targetUrl);
                     return;
                 }
             }

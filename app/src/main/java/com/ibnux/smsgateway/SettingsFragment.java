@@ -186,135 +186,7 @@ public class SettingsFragment extends Fragment {
     private void setupSmsWebhookMenu() {
         Context ctx = requireContext();
 
-        // --- Section 1: Security & Encryption ---
-        LinearLayout securitySection = createSection(ctx, "Security & Encryption");
-        
-        // Toggle: Enable Encryption
-        Switch swEncryption = new Switch(ctx);
-        swEncryption.setText("Enable Encryption (AES-GCM)");
-        swEncryption.setChecked(sp.getBoolean("enable_encryption", false));
-        swEncryption.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            sp.edit().putBoolean("enable_encryption", isChecked).apply();
-            logAction("Encryption Toggle", "Set to " + isChecked);
-        });
-        securitySection.addView(swEncryption);
-
-        // Key Management
-        String currentKey = SecurityUtil.getSharedKey(ctx);
-        EditText etKey = new EditText(ctx);
-        etKey.setHint("AES Key (Base64)");
-        etKey.setText(currentKey != null ? currentKey : "");
-        securitySection.addView(etKey);
-
-        LinearLayout keyButtons = new LinearLayout(ctx);
-        keyButtons.setOrientation(LinearLayout.HORIZONTAL);
-        
-        Button btnGenKey = new Button(ctx);
-        btnGenKey.setText("Generate New Key");
-        btnGenKey.setOnClickListener(v -> {
-            String newKey = SecurityUtil.generateNewKey();
-            etKey.setText(newKey);
-            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
-        });
-        
-        Button btnSaveKey = new Button(ctx);
-        btnSaveKey.setText("Use This Key");
-        btnSaveKey.setOnClickListener(v -> {
-            String key = etKey.getText().toString();
-            if(!key.isEmpty()) {
-                SecurityUtil.saveKey(ctx, key);
-                logAction("Updated AES Key", "New key saved");
-                Toast.makeText(ctx, "Key Saved", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        keyButtons.addView(btnGenKey);
-        keyButtons.addView(btnSaveKey);
-        securitySection.addView(keyButtons);
-
-        // Clipboard
-        Button btnCopyKey = new Button(ctx);
-        btnCopyKey.setText("Copy Active Key");
-        btnCopyKey.setOnClickListener(v -> {
-            String activeKey = SecurityUtil.getSharedKey(ctx);
-            if(activeKey != null) {
-                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("AES Key", activeKey);
-                clipboard.setPrimaryClip(clip);
-                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
-            }
-        });
-        securitySection.addView(btnCopyKey);
-        
-        containerSubMenuContent.addView(securitySection);
-
-        // --- Section: Webhook Signature (HMAC-SHA256) ---
-        LinearLayout hmacSection = createSection(ctx, "Webhook Signature (HMAC-SHA256)");
-        
-        // Toggle: Enable HMAC Signing
-        Switch swHmac = new Switch(ctx);
-        swHmac.setText("Enable HMAC Signing");
-        swHmac.setChecked(sp.getBoolean("enable_hmac_signing", false));
-        swHmac.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            sp.edit().putBoolean("enable_hmac_signing", isChecked).apply();
-            logAction("HMAC Toggle", "Set to " + isChecked);
-        });
-        hmacSection.addView(swHmac);
-
-        // Key Management
-        String currentHmacKey = SecurityUtil.getHmacKey(ctx);
-        EditText etHmacKey = new EditText(ctx);
-        etHmacKey.setHint("HMAC Key (Base64)");
-        etHmacKey.setText(currentHmacKey != null ? currentHmacKey : "");
-        hmacSection.addView(etHmacKey);
-
-        LinearLayout hmacKeyButtons = new LinearLayout(ctx);
-        hmacKeyButtons.setOrientation(LinearLayout.HORIZONTAL);
-        
-        Button btnGenHmacKey = new Button(ctx);
-        btnGenHmacKey.setText("Generate New Key");
-        btnGenHmacKey.setOnClickListener(v -> {
-            String newKey = SecurityUtil.generateHmacKey();
-            etHmacKey.setText(newKey);
-            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
-        });
-        
-        Button btnSaveHmacKey = new Button(ctx);
-        btnSaveHmacKey.setText("Use This Key");
-        btnSaveHmacKey.setOnClickListener(v -> {
-            String key = etHmacKey.getText().toString();
-            if(!key.isEmpty()) {
-                SecurityUtil.saveHmacKey(ctx, key);
-                logAction("Updated HMAC Key", "New HMAC key saved");
-                Toast.makeText(ctx, "HMAC Key Saved", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        hmacKeyButtons.addView(btnGenHmacKey);
-        hmacKeyButtons.addView(btnSaveHmacKey);
-        hmacSection.addView(hmacKeyButtons);
-
-        // Clipboard
-        Button btnCopyHmacKey = new Button(ctx);
-        btnCopyHmacKey.setText("Copy Active Key");
-        btnCopyHmacKey.setOnClickListener(v -> {
-            String activeKey = SecurityUtil.getHmacKey(ctx);
-            if(activeKey != null) {
-                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("HMAC Key", activeKey);
-                clipboard.setPrimaryClip(clip);
-                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
-            }
-        });
-        hmacSection.addView(btnCopyHmacKey);
-        
-        containerSubMenuContent.addView(hmacSection);
-
-        // --- Section 2: Sequential Dispatcher & Gatekeeper ---
+        // --- Section: Dispatcher & Gatekeeper ---
         LinearLayout dispatchSection = createSection(ctx, "Dispatcher & Gatekeeper");
 
         // Timeout
@@ -357,8 +229,262 @@ public class SettingsFragment extends Fragment {
 
         containerSubMenuContent.addView(dispatchSection);
 
-        // Filters (Legacy)
+        // --- Stream A Section: Bearer Token ---
+        LinearLayout streamABearerSection = createSection(ctx, "Stream A: Bearer Token");
+        
+        Switch swBearerA = new Switch(ctx);
+        swBearerA.setText("Enable Bearer Token");
+        swBearerA.setChecked(sp.getBoolean("enable_bearer_a", false));
+        swBearerA.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_bearer_a", isChecked).apply();
+            logAction("Bearer A Toggle", "Set to " + isChecked);
+        });
+        streamABearerSection.addView(swBearerA);
+
+        String currentBearerA = SecurityUtil.getBearerToken(ctx);
+        EditText etBearerA = new EditText(ctx);
+        etBearerA.setHint("Bearer Token");
+        etBearerA.setText(currentBearerA != null ? currentBearerA : "");
+        streamABearerSection.addView(etBearerA);
+
+        LinearLayout bearerAButtons = new LinearLayout(ctx);
+        bearerAButtons.setOrientation(LinearLayout.HORIZONTAL);
+        
+        Button btnGenBearerA = new Button(ctx);
+        btnGenBearerA.setText("Generate");
+        btnGenBearerA.setOnClickListener(v -> {
+            String newToken = SecurityUtil.generateBearerToken();
+            etBearerA.setText(newToken);
+            Toast.makeText(ctx, "Token Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
+        });
+        
+        Button btnSaveBearerA = new Button(ctx);
+        btnSaveBearerA.setText("Save");
+        btnSaveBearerA.setOnClickListener(v -> {
+            String token = etBearerA.getText().toString();
+            if(!token.isEmpty()) {
+                SecurityUtil.saveBearerToken(ctx, token);
+                logAction("Updated Bearer Token A", "New token saved");
+                Toast.makeText(ctx, "Token Saved", Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        Button btnCopyBearerA = new Button(ctx);
+        btnCopyBearerA.setText("Copy");
+        btnCopyBearerA.setOnClickListener(v -> {
+            String activeToken = SecurityUtil.getBearerToken(ctx);
+            if(activeToken != null) {
+                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("Bearer Token A", activeToken);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "No Active Token", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        bearerAButtons.addView(btnGenBearerA);
+        bearerAButtons.addView(btnSaveBearerA);
+        bearerAButtons.addView(btnCopyBearerA);
+        streamABearerSection.addView(bearerAButtons);
+        
+        containerSubMenuContent.addView(streamABearerSection);
+
+        // --- Stream A Section: HMAC-SHA256 Signing ---
+        LinearLayout streamAHmacSection = createSection(ctx, "Stream A: HMAC-SHA256 Signing");
+        
+        Switch swHmac = new Switch(ctx);
+        swHmac.setText("Enable HMAC Signing");
+        swHmac.setChecked(sp.getBoolean("enable_hmac_signing", false));
+        swHmac.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_hmac_signing", isChecked).apply();
+            logAction("HMAC Toggle", "Set to " + isChecked);
+        });
+        streamAHmacSection.addView(swHmac);
+
+        String currentHmacKey = SecurityUtil.getHmacKey(ctx);
+        EditText etHmacKey = new EditText(ctx);
+        etHmacKey.setHint("HMAC Key (Base64)");
+        etHmacKey.setText(currentHmacKey != null ? currentHmacKey : "");
+        streamAHmacSection.addView(etHmacKey);
+
+        LinearLayout hmacKeyButtons = new LinearLayout(ctx);
+        hmacKeyButtons.setOrientation(LinearLayout.HORIZONTAL);
+        
+        Button btnGenHmacKey = new Button(ctx);
+        btnGenHmacKey.setText("Generate");
+        btnGenHmacKey.setOnClickListener(v -> {
+            String newKey = SecurityUtil.generateHmacKey();
+            etHmacKey.setText(newKey);
+            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
+        });
+        
+        Button btnSaveHmacKey = new Button(ctx);
+        btnSaveHmacKey.setText("Save");
+        btnSaveHmacKey.setOnClickListener(v -> {
+            String key = etHmacKey.getText().toString();
+            if(!key.isEmpty()) {
+                SecurityUtil.saveHmacKey(ctx, key);
+                logAction("Updated HMAC Key", "New HMAC key saved");
+                Toast.makeText(ctx, "HMAC Key Saved", Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        Button btnCopyHmacKey = new Button(ctx);
+        btnCopyHmacKey.setText("Copy");
+        btnCopyHmacKey.setOnClickListener(v -> {
+            String activeKey = SecurityUtil.getHmacKey(ctx);
+            if(activeKey != null) {
+                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("HMAC Key", activeKey);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        hmacKeyButtons.addView(btnGenHmacKey);
+        hmacKeyButtons.addView(btnSaveHmacKey);
+        hmacKeyButtons.addView(btnCopyHmacKey);
+        streamAHmacSection.addView(hmacKeyButtons);
+        
+        containerSubMenuContent.addView(streamAHmacSection);
+
+        // --- Stream A Section: AES-GCM Encryption ---
+        LinearLayout streamAAesSection = createSection(ctx, "Stream A: AES-GCM Encryption");
+        
+        Switch swEncryption = new Switch(ctx);
+        swEncryption.setText("Enable Encryption");
+        swEncryption.setChecked(sp.getBoolean("enable_encryption", false));
+        swEncryption.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_encryption", isChecked).apply();
+            logAction("Encryption Toggle", "Set to " + isChecked);
+        });
+        streamAAesSection.addView(swEncryption);
+
+        String currentKey = SecurityUtil.getSharedKey(ctx);
+        EditText etAesKey = new EditText(ctx);
+        etAesKey.setHint("AES Key (Base64)");
+        etAesKey.setText(currentKey != null ? currentKey : "");
+        streamAAesSection.addView(etAesKey);
+
+        LinearLayout aesKeyButtons = new LinearLayout(ctx);
+        aesKeyButtons.setOrientation(LinearLayout.HORIZONTAL);
+        
+        Button btnGenAesKey = new Button(ctx);
+        btnGenAesKey.setText("Generate");
+        btnGenAesKey.setOnClickListener(v -> {
+            String newKey = SecurityUtil.generateNewKey();
+            etAesKey.setText(newKey);
+            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
+        });
+        
+        Button btnSaveAesKey = new Button(ctx);
+        btnSaveAesKey.setText("Save");
+        btnSaveAesKey.setOnClickListener(v -> {
+            String key = etAesKey.getText().toString();
+            if(!key.isEmpty()) {
+                SecurityUtil.saveKey(ctx, key);
+                logAction("Updated AES Key", "New key saved");
+                Toast.makeText(ctx, "Key Saved", Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        Button btnCopyAesKey = new Button(ctx);
+        btnCopyAesKey.setText("Copy");
+        btnCopyAesKey.setOnClickListener(v -> {
+            String activeKey = SecurityUtil.getSharedKey(ctx);
+            if(activeKey != null) {
+                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("AES Key", activeKey);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        aesKeyButtons.addView(btnGenAesKey);
+        aesKeyButtons.addView(btnSaveAesKey);
+        aesKeyButtons.addView(btnCopyAesKey);
+        streamAAesSection.addView(aesKeyButtons);
+        
+        containerSubMenuContent.addView(streamAAesSection);
+
+        // --- Stream B Section: Bearer Token ---
+        LinearLayout streamBBearerSection = createSection(ctx, "Stream B: Bearer Token");
+        
+        Switch swBearerB = new Switch(ctx);
+        swBearerB.setText("Enable Bearer Token");
+        swBearerB.setChecked(sp.getBoolean("enable_bearer_b", false));
+        swBearerB.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("enable_bearer_b", isChecked).apply();
+            logAction("Bearer B Toggle", "Set to " + isChecked);
+        });
+        streamBBearerSection.addView(swBearerB);
+
+        String currentBearerB = SecurityUtil.getBearerTokenStreamB(ctx);
+        EditText etBearerB = new EditText(ctx);
+        etBearerB.setHint("Bearer Token");
+        etBearerB.setText(currentBearerB != null ? currentBearerB : "");
+        streamBBearerSection.addView(etBearerB);
+
+        LinearLayout bearerBButtons = new LinearLayout(ctx);
+        bearerBButtons.setOrientation(LinearLayout.HORIZONTAL);
+        
+        Button btnGenBearerB = new Button(ctx);
+        btnGenBearerB.setText("Generate");
+        btnGenBearerB.setOnClickListener(v -> {
+            String newToken = SecurityUtil.generateBearerToken();
+            etBearerB.setText(newToken);
+            Toast.makeText(ctx, "Token Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
+        });
+        
+        Button btnSaveBearerB = new Button(ctx);
+        btnSaveBearerB.setText("Save");
+        btnSaveBearerB.setOnClickListener(v -> {
+            String token = etBearerB.getText().toString();
+            if(!token.isEmpty()) {
+                SecurityUtil.saveBearerTokenStreamB(ctx, token);
+                logAction("Updated Bearer Token B", "New token saved");
+                Toast.makeText(ctx, "Token Saved", Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        Button btnCopyBearerB = new Button(ctx);
+        btnCopyBearerB.setText("Copy");
+        btnCopyBearerB.setOnClickListener(v -> {
+            String activeToken = SecurityUtil.getBearerTokenStreamB(ctx);
+            if(activeToken != null) {
+                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("Bearer Token B", activeToken);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "No Active Token", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        bearerBButtons.addView(btnGenBearerB);
+        bearerBButtons.addView(btnSaveBearerB);
+        bearerBButtons.addView(btnCopyBearerB);
+        streamBBearerSection.addView(bearerBButtons);
+        
+        containerSubMenuContent.addView(streamBBearerSection);
+
+        // --- Filters Section ---
         LinearLayout filterSection = createSection(ctx, "Filters");
+
+        // Checkbox to apply filters to Stream B
+        CheckBox cbFilterStreamB = new CheckBox(ctx);
+        cbFilterStreamB.setText("Also apply filters to Stream B (Backup URL)");
+        cbFilterStreamB.setChecked(sp.getBoolean("filter_apply_to_stream_b", false));
+        cbFilterStreamB.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sp.edit().putBoolean("filter_apply_to_stream_b", isChecked).apply();
+        });
+        filterSection.addView(cbFilterStreamB);
+
         addButtonToLayout(filterSection, "Filter: Country Codes", v -> showCountryFilterDialog());
         addButtonToLayout(filterSection, "Filter: Message Prefix", v -> showFilterDialog("Allowed SMS Prefixes", "filter_prefix_enabled", "filter_prefix_list", false));
         addButtonToLayout(filterSection, "Filter: Message Length", v -> showFilterDialog("Allowed Message Lengths", "filter_length_enabled", "filter_length_list", true));

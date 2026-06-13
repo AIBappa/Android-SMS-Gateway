@@ -58,14 +58,8 @@ public class SmsListener extends BroadcastReceiver {
                 int timeout = sp.getInt("network_timeout", 15);
                 boolean logSuccess = sp.getBoolean("log_post_success", false);
 
-                // Stream B (Backup) - Gatekeeper & Dispatcher
-                if (sp.getBoolean("enable_stream_b", false)) {
-                    String backupUrl = sp.getString("backup_url", null);
-                    if (backupUrl != null && !backupUrl.isEmpty() && backupUrl.startsWith("http")) {
-                         // Backup sends raw JSON, unencrypted
-                         PostQueueManager.enqueue(context, backupUrl, jsonPayload.toString(), "application/json", logSuccess, timeout);
-                    }
-                }
+                // Check if filters apply to Stream B
+                boolean filtersApplyToStreamB = sp.getBoolean("filter_apply_to_stream_b", false);
 
                 // Filters
                 boolean passedFilters = true;
@@ -120,13 +114,34 @@ public class SmsListener extends BroadcastReceiver {
                     if(!match) passedFilters = false;
                 }
 
+                // Stream B (Backup) - Gatekeeper & Dispatcher
+                boolean streamBShouldSend = false;
+                if (sp.getBoolean("enable_stream_b", false)) {
+                    if (filtersApplyToStreamB) {
+                        streamBShouldSend = passedFilters;
+                    } else {
+                        streamBShouldSend = true;
+                    }
+                }
+                if (streamBShouldSend) {
+                    String backupUrl = sp.getString("backup_url", null);
+                    if (backupUrl != null && !backupUrl.isEmpty() && backupUrl.startsWith("http")) {
+                        // Backup sends raw JSON, unencrypted
+                        String bearerTokenB = null;
+                        if (sp.getBoolean("enable_bearer_b", false)) {
+                            bearerTokenB = SecurityUtil.getBearerTokenStreamB(context);
+                        }
+                        PostQueueManager.enqueue(context, backupUrl, jsonPayload.toString(), "application/json", logSuccess, timeout, bearerTokenB, null);
+                    }
+                }
+
                 // Stream A (Primary) - Gatekeeper & Dispatcher
                 if(sp.getBoolean("gateway_on",true)) {
                     if(passedFilters) {
                         if (sp.getBoolean("enable_stream_a", true)) {
                             String url = sp.getString("urlPost", null);
                             if(url!=null) {
-                                // Delegate to sendPOST which handles Encryption logic
+                                // Delegate to sendPOST which handles Encryption & auth logic
                                 sendPOST(url, messageFrom, messageBody, "received", context, messageTimestamp);
                             }
                         }
@@ -149,6 +164,8 @@ public class SmsListener extends BroadcastReceiver {
         int timeout = sp.getInt("network_timeout", 15);
         boolean logSuccess = sp.getBoolean("log_post_success", false);
         boolean encrypt = sp.getBoolean("enable_encryption", false);
+        boolean hmacEnabled = sp.getBoolean("enable_hmac_signing", false);
+        boolean bearerEnabled = sp.getBoolean("enable_bearer_a", false);
         
         try {
             JSONObject json = new JSONObject();
@@ -158,25 +175,34 @@ public class SmsListener extends BroadcastReceiver {
             json.put("timestamp", msgTimestamp);
             
             String finalPayload;
+            String hmacKey = null;
+            String bearerToken = null;
             
             if (encrypt) {
                 String key = SecurityUtil.getSharedKey(context);
                 if (key != null) {
                     JSONObject wrapper = new JSONObject();
                     wrapper.put("payload", SecurityUtil.encrypt(json.toString(), key));
-                    wrapper.put("is_encrypted", true);
                     finalPayload = wrapper.toString();
                 } else {
                     // Fallback if key missing but encryption enabled
-                    json.put("is_encrypted", false);
                     finalPayload = json.toString();
                 }
             } else {
-                json.put("is_encrypted", false);
                 finalPayload = json.toString();
             }
             
-            PostQueueManager.enqueue(context, urlPost, finalPayload, "application/json", logSuccess, timeout);
+            // Get HMAC key if HMAC signing is enabled
+            if (hmacEnabled) {
+                hmacKey = SecurityUtil.getHmacKey(context);
+            }
+            
+            // Get Bearer token if enabled
+            if (bearerEnabled) {
+                bearerToken = SecurityUtil.getBearerToken(context);
+            }
+            
+            PostQueueManager.enqueue(context, urlPost, finalPayload, "application/json", logSuccess, timeout, bearerToken, hmacKey);
             
         } catch (Exception e) {
             e.printStackTrace();
@@ -184,4 +210,3 @@ public class SmsListener extends BroadcastReceiver {
         }
     }
 }
-

@@ -246,3 +246,7 @@ Live Stream: Volatile RAM-only feed. This is already implemented on main page. I
 
 System Log: sms.gateway.log (Fail-only and enabled/disabled for POSTs, Audit for Keys/Purge).
 
+
+Stream A and Stream B functionality:
+For Stream A - need Bearer token, HMAC and AES toggles, plus each should have generate, save, copy and edit buttons for all Bearer, HMAC and AES. For Stream B -need Bearer token toggle, and the generate, save, copy and edit buttons.  Also filters are currently applicable only for Stream A (country code, prefix and message length). There should also be a checkbox near the filters to make them applicable to Stream B.
+Also is_encrypted field should be removed.
