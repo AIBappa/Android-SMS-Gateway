@@ -13,6 +13,7 @@ import android.util.Log;
 
 import com.ibnux.smsgateway.Utils.GatewayLogger;
 import com.ibnux.smsgateway.Utils.SecurityUtil;
+import com.ibnux.smsgateway.data.LogLine;
 
 import org.json.JSONObject;
 
@@ -41,8 +42,8 @@ public class SmsListener extends BroadcastReceiver {
                 String messageTimestamp = smsMessage.getTimestampMillis()+"";
                 Log.i("SMS From", messageFrom);
                 Log.i("SMS Body", messageBody);
-                // RAM-only Log for Live Stream
-                writeLog("SMS: RECEIVED : " + messageFrom + " " + messageBody,context);
+                // RAM-only Log for Live Stream; capture LogLine for status tracking
+                LogLine smsLogLine = writeLog("SMS: RECEIVED : " + messageFrom + " " + messageBody,context);
                 
                 // Construct Base JSON Payload
                 JSONObject jsonPayload = new JSONObject();
@@ -142,7 +143,7 @@ public class SmsListener extends BroadcastReceiver {
                             String url = sp.getString("urlPost", null);
                             if(url!=null) {
                                 // Delegate to sendPOST which handles Encryption & auth logic
-                                sendPOST(url, messageFrom, messageBody, "received", context, messageTimestamp);
+                                sendPOST(url, messageFrom, messageBody, "received", context, messageTimestamp, smsLogLine);
                             }
                         }
                     }
@@ -155,7 +156,12 @@ public class SmsListener extends BroadcastReceiver {
         }
     }
 
+    // Backward-compatible overload — callers that don't have a LogLine (e.g. delivered/sent receivers)
     public static void sendPOST(String urlPost,String from, String msg,String tipe, Context context, String msgTimestamp){
+        sendPOST(urlPost, from, msg, tipe, context, msgTimestamp, null);
+    }
+
+    public static void sendPOST(String urlPost,String from, String msg,String tipe, Context context, String msgTimestamp, LogLine logLine){
         if(urlPost==null) return;
         if(from == null) from = "";
         if(!urlPost.startsWith("http")) return;
@@ -202,7 +208,7 @@ public class SmsListener extends BroadcastReceiver {
                 bearerToken = SecurityUtil.getBearerToken(context);
             }
             
-            PostQueueManager.enqueue(context, urlPost, finalPayload, "application/json", logSuccess, timeout, bearerToken, hmacKey);
+            PostQueueManager.enqueue(context, urlPost, finalPayload, "application/json", logSuccess, timeout, bearerToken, hmacKey, logLine);
             
         } catch (Exception e) {
             e.printStackTrace();
