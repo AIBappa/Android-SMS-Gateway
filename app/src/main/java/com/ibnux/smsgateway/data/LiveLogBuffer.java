@@ -18,6 +18,15 @@ public class LiveLogBuffer {
         truncate();
     }
 
+    public static synchronized void updateLatestStatus(String status) {
+        for (LogLine line : buffer) {
+            if (line.status == null || line.status.isEmpty()) {
+                line.status = status;
+                break;
+            }
+        }
+    }
+
     private static void truncate() {
         while (buffer.size() > maxEntries) {
             buffer.removeLast();

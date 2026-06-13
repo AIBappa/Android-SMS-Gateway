@@ -3,6 +3,7 @@ package com.ibnux.smsgateway.layanan;
 import android.content.Context;
 import com.ibnux.smsgateway.Utils.GatewayLogger;
 import com.ibnux.smsgateway.Utils.SecurityUtil;
+import com.ibnux.smsgateway.data.LiveLogBuffer;
 import java.io.BufferedWriter;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -11,6 +12,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import static com.ibnux.smsgateway.layanan.PushService.tellMainActivity;
 
 public class PostQueueManager {
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -78,16 +81,21 @@ public class PostQueueManager {
             int responseCode = conn.getResponseCode();
 
             if (responseCode >= 200 && responseCode < 300) {
-                // Only log success if enabled
+                LiveLogBuffer.updateLatestStatus("ACK [" + responseCode + "]");
+                tellMainActivity();
+                GatewayLogger.log(context, "POST_SUCCESS", "URL: " + targetUrl + " | Code: " + responseCode);
                 if (logSuccess) {
-                    GatewayLogger.log(context, "POST_SUCCESS", "URL: " + targetUrl + " | Code: " + responseCode);
                     PushService.writeLog("SMS: POST : " + targetUrl + " : Code " + responseCode, context);
                 }
             } else {
+                LiveLogBuffer.updateLatestStatus("FAIL [" + responseCode + "]");
+                tellMainActivity();
                 GatewayLogger.log(context, "POST_FAIL", "HTTP " + responseCode + " | URL: " + targetUrl);
                 PushService.writeLog("SMS: POST FAILED : " + targetUrl + " : HTTP " + responseCode, context);
             }
         } catch (Exception e) {
+            LiveLogBuffer.updateLatestStatus("ERR");
+            tellMainActivity();
             GatewayLogger.log(context, "POST_ERROR", e.getMessage() + " | URL: " + targetUrl);
             PushService.writeLog("SMS: POST FAILED : " + targetUrl + " : " + e.getMessage(), context);
         } finally {

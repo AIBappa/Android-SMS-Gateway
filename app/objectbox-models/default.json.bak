@@ -17,8 +17,7 @@
         {
           "id": "2:3743244855524059654",
           "name": "time",
-          "type": 6,
-          "flags": 4
+          "type": 6
         },
         {
           "id": "3:8298078138931550946",
@@ -32,9 +31,43 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "2:2924878531021520614",
+      "lastPropertyId": "5:7311315999576372970",
+      "name": "ActionLog",
+      "properties": [
+        {
+          "id": "1:3855001964001126049",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:6825252621876219421",
+          "name": "time",
+          "type": 6
+        },
+        {
+          "id": "3:869943513799184401",
+          "name": "date",
+          "type": 9
+        },
+        {
+          "id": "4:7213605174825832160",
+          "name": "action",
+          "type": 9
+        },
+        {
+          "id": "5:7311315999576372970",
+          "name": "details",
+          "type": 9
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "1:853953005959405758",
+  "lastEntityId": "2:2924878531021520614",
   "lastIndexId": "0:0",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",

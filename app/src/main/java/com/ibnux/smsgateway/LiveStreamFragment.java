@@ -178,6 +178,7 @@ public class LiveStreamFragment extends Fragment {
                     @Override
                     public void run() {
                         adapter.getNewData();
+                        recyclerview.smoothScrollToPosition(0);
                     }
                 });
             else if (intent.hasExtra("kill") && intent.getBooleanExtra("kill", false)) {
