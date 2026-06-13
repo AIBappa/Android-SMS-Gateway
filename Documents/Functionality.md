@@ -14,55 +14,110 @@ This Android SMS Gateway application acts as a bridge between SMS/USSD networks 
 *   **Timeout**: User-configurable network timeout (seconds) applied to all HTTP requests.
 
 ### 2. Security & Encryption
-*   **AES-GCM Encryption**: Optional encryption for the Primary Stream.
-    *   If Enabled: Sends `{ "payload": "ENCRYPTED_DATA", "is_encrypted": true }`.
-    *   If Disabled: Sends raw JSON `{ ..., "is_encrypted": false }`.
-*   **Key Management**: Built-in Key Generator (256-bit Base64) with View/Copy/Save capabilities.
+
+#### A. AES-GCM Encryption (Payload)
+*   **Algorithm**: AES/GCM/NoPadding, 256-bit key.
+*   **Format**: Base64(IV + CipherText + Tag), where IV is 12 bytes.
+*   Optional encryption for the **Primary Stream (Stream A)** only.
+    *   If Enabled: Sends `{ "payload": "ENCRYPTED_DATA" }`.
+    *   If Disabled: Sends raw JSON payload.
+*   **Key Management**: Built-in Key Generator (256-bit Base64) with Generate/Save/Copy capabilities. Keys are stored in `EncryptedSharedPreferences`. Editable text field allows manual key entry.
+
+#### B. HMAC-SHA256 Signing (Webhook Signature)
+*   **Algorithm**: HMAC-SHA256 using a 256-bit key.
+*   **Header**: `X-signature: <Base64-encoded HMAC-SHA256 digest of the raw request body>`
+*   Optional signing applied to **Primary Stream (Stream A)** only when toggled on in Settings.
+*   **Key Management**: Separate HMAC 256-bit Base64 key with Generate/Save/Copy capabilities. Keys stored in `EncryptedSharedPreferences`. Editable text field allows manual key entry.
+*   **Behavior**: If signing is enabled but the HMAC key is missing or signing fails, the POST is aborted (not sent).
+
+#### C. Bearer Token Authentication
+*   **Header**: `Authorization: Bearer <token>`
+*   Optional authentication for both **Primary Stream (Stream A)** and **Backup Stream (Stream B)**.
+*   **Token Management**: Separate tokens per stream with Generate/Save/Copy capabilities. Tokens stored in `EncryptedSharedPreferences`. Editable text field allows manual token entry.
 
 ### 3. Bifurcated Data Streams
 The application implements a bifurcated data engine to handle SMS forwarding:
 
+> **⚠️ Important:** The app uses the Primary Receiver URL and Backup URL **exactly as configured** in Settings — it does **NOT** automatically append any path suffix. For example, if you set the Backup URL to `https://x.com`, the app will POST directly to `https://x.com` (not to `https://x.com/api/sms/backup`). The paths shown in the API documentation (e.g., `/api/sms/receive`, `/api/sms/backup`) are **suggested server endpoint paths** that you should include in your full URL when configuring the app.
+
 *   **Stream A (Primary)**:
     *   **Target**: `Receiver URL`.
     *   **Purpose**: Secure, filtered transaction processing.
-    *   **Features**: Supports AES Encryption, Filters (Country/Prefix/Length).
-    *   **Logging**: Failures log to System Log; Successes log to Live Stream (RAM).
+    *   **Features**:
+        *   Supports Bearer Token Authentication
+        *   Supports HMAC-SHA256 Signing
+        *   Supports AES-GCM Encryption
+        *   Supports Filters (Country Code, Message Prefix, Message Length)
+    *   **Logging**: Failures log to System Log; Successes log to Live Stream (RAM) (when "Log Successful POSTs" is enabled).
 
 *   **Stream B (Backup)**:
     *   **Target**: `Backup URL`.
     *   **Purpose**: Raw data archival / Catch-all.
-    *   **Features**: Sends raw, unencrypted JSON. Bypasses all filters.
-    *   **Logging**: Failures log to System Log; Successes log to Live Stream (RAM).
+    *   **Features**:
+        *   Sends raw, unencrypted JSON.
+        *   Supports Bearer Token Authentication.
+        *   Bypasses all filters by default.
+        *   Optional filter checkbox in Settings to also apply filters to Stream B.
+    *   **Logging**: Failures log to System Log (via `BackupSendService`); Successes are intentionally not logged.
 
 ### 4. Logging System
 The application maintains three distinct log types, accessible via the UI:
 
 #### A. Live Stream (Main Page)
 *   **Storage**: **Volatile RAM-only** (`LiveLogBuffer`). Cleared on app restart.
-*   **Content**: Real-time view of **ALL** transactions (SMS Received, SMS Sent, HTTP Success/Fail, USSD actions).
-*   **Limits**: Self-truncating based on "Live Stream Max Entries" user setting (Default: 100).
+*   **Content**: Real-time view of transactions (SMS Received, SMS Sent, HTTP Success/Fail, USSD actions, Gateway status).
+*   **Limits**: Self-truncating based on "Live Stream Max Entries" user setting (Default: 100, Minimum: 10).
 *   **UI**: Searchable list with "Clear Log" button.
 
 #### B. System Log (Settings -> Unified & System Logs)
-*   **Storage**: **Persistent Text File** (`sms.gateway.log`).
-*   **Content**: **Failures Only** (HTTP Errors, Timeouts, Send Failures) and critical system events (Heartbeats). Successful transactions are NOT logged here to save space and reduce noise.
+*   **Storage**: **Persistent Text File** (`sms.gateway.log` at `context.getFilesDir()/logs/`).
+*   **Content**: **Failures Only by default** (HTTP Errors, Timeouts, Send Failures) and critical system events (Heartbeats, HMAC errors, key changes). Successful transactions are NOT logged here to save space and reduce noise, unless "Log Successful POSTs" is enabled in Settings.
 *   **UI**:
     *   Paginated view (50 lines per page, newest first).
-    *   "Share File" button to export the full log file.
+    *   "Share File" button to export the full log file (via `FileProvider`).
     *   "Clear File" button to wipe the log.
 
 #### C. Audit Log (Settings -> Unified & System Logs)
 *   **Storage**: **Persistent Database** (`ActionLog` entity via ObjectBox).
-*   **Content**: User actions and configuration changes (e.g., "Changed Secret ID", "Generated New Key", "Auto-Delete Run", "Updated Receiver URL").
+*   **Content**: User actions and configuration changes (e.g., "Changed Secret ID", "Generated New Key", "Auto-Delete Run", "Updated Receiver URL", "Encryption Toggle", "HMAC Toggle").
 *   **UI**:
     *   Paginated view (50 entries per page).
     *   "Share Page" button.
     *   "Clear DB" button.
 
+### 5. Push & USSD Messaging (Server → Device)
+
+#### A. Firebase Cloud Messaging (FCM) Push
+*   The server sends SMS/USSD commands to the device via FCM.
+*   **Send SMS**: Server posts to your custom backend endpoint (e.g., `/api/sms/send`) with `to` (phone number), `text` (message), `secret`, `deviceID` (FCM token), which then forwards the request to Firebase Cloud Messaging (FCM).
+*   **Initiate USSD**: Server posts with `to` set to a USSD code (e.g., `*888#`). The `text` field is ignored.
+*   **Authentication**: `secret` parameter must match "Your Secret" generated by the app (UUID v4), displayed in Settings.
+
+#### B. WebSocket Tunnel (Alternative to Firebase)
+*   A persistent WebSocket connection can replace Firebase Push for receiving commands.
+*   Configured via "WebSocket Server URL (wss://)" in Settings (Push & USSD Messaging).
+*   Started/Stopped via a toggle switch in the same section.
+*   When enabled, the server can send SMS/USSD commands through the WebSocket tunnel instead of FCM.
+
+### 6. Sent & Delivered Status Reports
+*   When the app sends an SMS (triggered from the server via FCM or WebSocket), it reports delivery status back using the same `sendPOST()` method as Stream A.
+*   **Sent Status**: Reported with `"type": "sent"` — indicates the SMS was sent from the device.
+*   **Delivered Status**: Reported with `"type": "delivered"` — indicates the SMS was delivered to the recipient.
+*   **Status Values**: `"message": "success"` on success, or failure messages like `"Generic failure"`, `"No service"`, `"Null PDU"`, `"Radio off"`.
+*   **Retry Logic**: Failed sends are retried up to 3 times with a 10-second delay between attempts.
+
+### 7. USSD Callback
+*   USSD responses are captured via `UssdService` (Accessibility Service) and forwarded to the configured USSD URL.
+*   **Fallback**: If USSD URL is empty, falls back to the Primary Receiver URL.
+*   **Payload**: Sent as JSON via `SmsListener.sendPOST()` (application/json format) — the same method used for Stream A.
+*   **⚠️ Security Context**: Because USSD uses `sendPOST()`, the payload may be **encrypted**, **HMAC-signed**, or **Bearer-token-authenticated** depending on Stream A's settings.
+*   **Type**: Always `"type": "ussd"`.
+*   **From Field**: When initiated from the USSD queue, `from` includes the USSD code + SIM (e.g., `"*888#1"`). When triggered without a queued session, `from` is `"ussd"`.
+
 ## Maintenance Tools
 *   **Auto-Delete**: Deletes old SMS messages from the device inbox based on "Retention Hours". Can be run manually via "Start Auto-Delete".
 *   **Inbox Capacity**: Checks and displays the current number of messages in the inbox.
-*   **Battery Optimization**: Shortcut to disable battery optimization for reliable background operation.
+*   **Battery Optimization**: Status-aware section showing whether battery optimization is disabled; provides shortcut to request disable or open system battery settings.
 
 ## UI Structure
 
@@ -70,15 +125,203 @@ The application maintains three distinct log types, accessible via the UI:
 *   Master Toggle (Gateway On/Off).
 *   Clear Log Button.
 *   Search Bar.
-*   Live Log List (RAM-based).
+*   Live Log List (RAM-based, RecyclerView with pagination).
+*   Swipe-to-refresh.
 
 ### Tab 2: Settings
-*   **Push & USSD Messaging**: Secret ID, Device ID, USSD Test/Permissions, Push URL.
+*   **Push & USSD Messaging**: Secret ID, Device ID (FCM Token), USSD Test/Permissions, Push URL (FCM endpoint), Request Expiry, WebSocket Tunnel URL/Toggle.
 *   **SMS Webhook**:
-    *   **Security & Encryption**: Enable Encryption toggle, Key Management (Generate/View/Copy/Save).
-    *   **Dispatcher & Gatekeeper**: Network Timeout, Primary/Backup URL Toggles & Inputs.
-    *   **Filters**: Country Code, Prefix, Length.
+    *   **Dispatcher & Gatekeeper**: Network Timeout, Primary URL Toggle & Input, Backup URL Toggle & Input.
+    *   **Stream A: Bearer Token**: Toggle, editable token field, Generate/Save/Copy buttons.
+    *   **Stream A: HMAC-SHA256 Signing**: Toggle, editable key field, Generate/Save/Copy buttons.
+    *   **Stream A: AES-GCM Encryption**: Toggle, editable key field, Generate/Save/Copy buttons.
+    *   **Stream B: Bearer Token**: Toggle, editable token field, Generate/Save/Copy buttons.
+    *   **Filters**: Country Code (multi-select dialog), Message Prefix, Message Length, and "Also apply to Stream B" checkbox.
 *   **Unified & System Logs**:
-    *   **Audit Log**: View user actions (Paginated), Share, Clear.
-    *   **System Log**: View failures (Paginated), Share File, Clear File.
-*   **System Settings**: Default App check, Inbox Maintenance (Auto-Delete, Capacity), Battery Optimization.
+    *   **Audit Log**: View user actions (Paginated, 50/page), Share Page, Clear DB.
+    *   **System Log**: View failures (Paginated, 50/page), Share File, Clear File.
+*   **System Settings**: Default SMS App check, Inbox Maintenance (Auto-Delete hours, Start Auto-Delete, Check Capacity), Live Stream Max Entries, Log Successful POSTs toggle, Battery Optimization status.
+
+## Endpoint Reference
+
+### Stream A (Primary) — POST to Receiver URL
+```
+POST /your-receiver-endpoint HTTP/1.1
+Host: your-server.com
+Content-Type: application/json
+
+{
+  "from": "+1234567890",
+  "message": "Hello World",
+  "type": "received",
+  "timestamp": "1678886400000"
+}
+```
+**With Encryption Enabled:**
+```
+POST /your-receiver-endpoint HTTP/1.1
+Host: your-server.com
+Content-Type: application/json
+
+{
+  "payload": "VGhpcyBpcyBhbiBleGFtcGxlIGVuY3J5cHRlZCBwYXlsb2Fk..."
+}
+```
+**With HMAC-SHA256 Signing Enabled (Header added to requests):**
+```
+X-signature: <Base64 HMAC-SHA256 digest of the request body>
+```
+**With Bearer Token Enabled (Header added to requests):**
+```
+Authorization: Bearer <token>
+```
+
+### Stream B (Backup) — POST to Backup URL
+```
+POST /your-backup-endpoint HTTP/1.1
+Host: your-server.com
+Content-Type: application/json
+
+{
+  "from": "+1234567890",
+  "message": "Hello World",
+  "type": "received",
+  "timestamp": "1678886400000"
+}
+```
+*Note: Backup stream always sends raw/unencrypted JSON and bypasses all filters by default. Filters can optionally be applied to Stream B via the "Also apply filters to Stream B" checkbox in Settings.*
+> **⚠️ Important:** The Backup URL is used verbatim from Settings. If your server expects requests at `https://x.com/api/sms/backup`, you must enter the **complete URL** `https://x.com/api/sms/backup` in the Backup URL field — the app does not append any path automatically.
+
+## Important URL Usage Note
+The Primary Receiver URL and Backup URL fields in the app's Settings are used **exactly as entered** — no path, query parameter, or suffix is appended automatically. The endpoint paths listed below (e.g., `/api/sms/receive`, `/api/sms/backup`) are suggestions for your server implementation. When configuring the app, you must provide the **full URL** including any path segments.
+
+For example, to use the suggested endpoints:
+- **Primary URL**: `https://your-server.com/api/sms/receive`
+- **Backup URL**: `https://your-server.com/api/sms/backup`
+
+## Curl Test Examples
+
+### 1. Primary Receiver (Stream A) — Unencrypted
+```bash
+curl -X POST https://your-server.com/api/sms/receive \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "+1234567890",
+    "message": "Test SMS from curl",
+    "type": "received",
+    "timestamp": "1678886400000"
+  }'
+```
+
+### 2. Primary Receiver (Stream A) — Encrypted
+```bash
+curl -X POST https://your-server.com/api/sms/receive \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payload": "BASE64_ENCODED_IV_CIPHERTEXT_TAG"
+  }'
+```
+
+### 3. Primary Receiver (Stream A) — With HMAC-SHA256 Signature
+```bash
+# First, generate the HMAC signature of the request body:
+# echo -n '<request-body>' | openssl dgst -sha256 -hmac '<base64-decoded-hmac-key>' -binary | base64 -w0
+
+curl -X POST https://your-server.com/api/sms/receive \
+  -H "Content-Type: application/json" \
+  -H "X-signature: GENERATED_HMAC_SIGNATURE" \
+  -d '{
+    "from": "+1234567890",
+    "message": "Test SMS with HMAC",
+    "type": "received",
+    "timestamp": "1678886400000"
+  }'
+```
+
+### 4. Primary Receiver (Stream A) — With Bearer Token
+```bash
+curl -X POST https://your-server.com/api/sms/receive \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "from": "+1234567890",
+    "message": "Test SMS with Bearer",
+    "type": "received",
+    "timestamp": "1678886400000"
+  }'
+```
+
+### 5. Backup Receiver (Stream B)
+```bash
+curl -X POST https://your-server.com/api/sms/backup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "+1234567890",
+    "message": "Test SMS to backup stream",
+    "type": "received",
+    "timestamp": "1678886400000"
+  }'
+```
+
+### 6. Backup Receiver (Stream B) — With Bearer Token
+```bash
+curl -X POST https://your-server.com/api/sms/backup \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "from": "+1234567890",
+    "message": "Test SMS to backup stream",
+    "type": "received",
+    "timestamp": "1678886400000"
+  }'
+```
+
+### 7. USSD Response Receiver
+```bash
+curl -X POST https://your-server.com/api/sms/ussd \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "ussd",
+    "message": "Your balance is $10.00",
+    "type": "ussd",
+    "timestamp": "1678886400000"
+  }'
+```
+*Note: The `from` field may include SIM info (e.g., `*888#1`).*
+
+### 8. Sent Status Report (via Primary Receiver URL)
+```bash
+curl -X POST https://your-server.com/api/sms/receive \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "+1234567890",
+    "message": "success",
+    "type": "sent",
+    "timestamp": "1678886500000"
+  }'
+```
+*Note: Status values include "success", "Generic failure", "No service", "Null PDU", or "Radio off".*
+
+### 9. Delivered Status Report (via Primary Receiver URL)
+```bash
+curl -X POST https://your-server.com/api/sms/receive \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "+1234567890",
+    "message": "success",
+    "type": "delivered",
+    "timestamp": "1678886600000"
+  }'
+```
+*Note: Status values include "success" or "failed".*
+
+### 10. Send SMS / Initiate USSD (Server → Device via FCM)
+```bash
+curl -X POST https://your-server.com/api/sms/send \
+  -d "to=+1234567890" \
+  -d "text=Hello from server" \
+  -d "secret=YOUR_SECRET_KEY" \
+  -d "deviceID=YOUR_FCM_TOKEN" \
+  -d "sim=1"
+```
+*Note: This uses `application/x-www-form-urlencoded` format, sent to your backend which forwards to FCM.*

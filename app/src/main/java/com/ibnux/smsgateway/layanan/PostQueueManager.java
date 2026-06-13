@@ -1,9 +1,10 @@
 package com.ibnux.smsgateway.layanan;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import com.ibnux.smsgateway.Utils.GatewayLogger;
 import com.ibnux.smsgateway.Utils.SecurityUtil;
+import com.ibnux.smsgateway.data.LiveLogBuffer;
+import com.ibnux.smsgateway.data.LogLine;
 import java.io.BufferedWriter;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -13,16 +14,40 @@ import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static com.ibnux.smsgateway.layanan.PushService.tellMainActivity;
+
 public class PostQueueManager {
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
 
+    // Legacy method for backward compatibility
     public static void enqueue(Context context, String url, String payload, String contentType, boolean logSuccess, int timeout) {
+        enqueue(context, url, payload, contentType, logSuccess, timeout, null, null);
+    }
+
+    // New method with bearer token and HMAC key support
+    public static void enqueue(Context context, String url, String payload, String contentType, boolean logSuccess, int timeout, String bearerToken, String hmacKey) {
+        enqueue(context, url, payload, contentType, logSuccess, timeout, bearerToken, hmacKey, null);
+    }
+
+    // Full method with LogLine for precise status tracking
+    public static void enqueue(Context context, String url, String payload, String contentType, boolean logSuccess, int timeout, String bearerToken, String hmacKey, LogLine logLine) {
+        final String finalBearerToken = bearerToken;
+        final String finalHmacKey = hmacKey;
+        final LogLine finalLogLine = logLine;
         executor.execute(() -> {
-            postData(context, url, payload, contentType, logSuccess, timeout);
+            postData(context, url, payload, contentType, logSuccess, timeout, finalBearerToken, finalHmacKey, finalLogLine);
         });
     }
 
     private static void postData(Context context, String targetUrl, String payload, String contentType, boolean logSuccess, int timeout) {
+        postData(context, targetUrl, payload, contentType, logSuccess, timeout, null, null);
+    }
+
+    private static void postData(Context context, String targetUrl, String payload, String contentType, boolean logSuccess, int timeout, String bearerToken, String hmacKey) {
+        postData(context, targetUrl, payload, contentType, logSuccess, timeout, bearerToken, hmacKey, null);
+    }
+
+    private static void postData(Context context, String targetUrl, String payload, String contentType, boolean logSuccess, int timeout, String bearerToken, String hmacKey, LogLine logLine) {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(targetUrl);
@@ -41,21 +66,23 @@ public class PostQueueManager {
                 conn.setRequestProperty("Content-Type", contentType);
             }
 
-            // HMAC-SHA256 Signing
-            boolean hmacEnabled = context.getSharedPreferences("pref", 0).getBoolean("enable_hmac_signing", false);
-            if (hmacEnabled) {
-                String hmacKey = SecurityUtil.getHmacKey(context);
-                if (hmacKey != null && !hmacKey.isEmpty()) {
-                    String signature = SecurityUtil.signPayload(payload, hmacKey);
-                    if (signature != null) {
-                        conn.setRequestProperty("X-signature", signature);
-                        GatewayLogger.log(context, "HMAC", "HMAC_SIGN_SUCCESS: Signature added to " + targetUrl);
-                    } else {
-                        GatewayLogger.log(context, "HMAC", "HMAC_SIGN_FAILED: Could not generate signature for " + targetUrl);
-                        return;
-                    }
+            // Bearer Token Authentication
+            if (bearerToken != null && !bearerToken.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
+            }
+
+            // HMAC-SHA256 Signing (per-stream)
+            if (hmacKey != null && !hmacKey.isEmpty()) {
+                String signature = SecurityUtil.signPayload(payload, hmacKey);
+                if (signature != null) {
+                    conn.setRequestProperty("X-signature", signature);
+                    GatewayLogger.log(context, "HMAC", "HMAC_SIGN_SUCCESS: Signature added to " + targetUrl);
                 } else {
-                    GatewayLogger.log(context, "HMAC", "HMAC_KEY_MISSING: HMAC enabled but no key configured for " + targetUrl);
+                    GatewayLogger.log(context, "HMAC", "HMAC_SIGN_FAILED: Could not generate signature for " + targetUrl);
+                    if (logLine != null) {
+                        LiveLogBuffer.updateLatestStatus(logLine, "ERR");
+                    }
+                    tellMainActivity();
                     return;
                 }
             }
@@ -69,16 +96,27 @@ public class PostQueueManager {
             int responseCode = conn.getResponseCode();
 
             if (responseCode >= 200 && responseCode < 300) {
-                // Only log success if enabled
+                if (logLine != null) {
+                    LiveLogBuffer.updateLatestStatus(logLine, "ACK [" + responseCode + "]");
+                }
+                tellMainActivity();
+                GatewayLogger.log(context, "POST_SUCCESS", "URL: " + targetUrl + " | Code: " + responseCode);
                 if (logSuccess) {
-                    GatewayLogger.log(context, "POST_SUCCESS", "URL: " + targetUrl + " | Code: " + responseCode);
                     PushService.writeLog("SMS: POST : " + targetUrl + " : Code " + responseCode, context);
                 }
             } else {
+                if (logLine != null) {
+                    LiveLogBuffer.updateLatestStatus(logLine, "FAIL [" + responseCode + "]");
+                }
+                tellMainActivity();
                 GatewayLogger.log(context, "POST_FAIL", "HTTP " + responseCode + " | URL: " + targetUrl);
                 PushService.writeLog("SMS: POST FAILED : " + targetUrl + " : HTTP " + responseCode, context);
             }
         } catch (Exception e) {
+            if (logLine != null) {
+                LiveLogBuffer.updateLatestStatus(logLine, "ERR");
+            }
+            tellMainActivity();
             GatewayLogger.log(context, "POST_ERROR", e.getMessage() + " | URL: " + targetUrl);
             PushService.writeLog("SMS: POST FAILED : " + targetUrl + " : " + e.getMessage(), context);
         } finally {

@@ -5,9 +5,10 @@ import io.objectbox.annotation.Id;
 
 @Entity
 public class LogLine {
-    @Id
-    public long id;
-    public long time;
-    public String date;
-    public String message;
+@Id
+public long id;
+public long time;
+public String date;
+public String message;
+public String status;
 }

@@ -1,5 +1,9 @@
 package com.ibnux.smsgateway.data;
 
+import android.graphics.Color;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,12 +25,13 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.MyViewHolder> {
     long smallTime = System.currentTimeMillis(), bigTime = 0;
 
     public static class MyViewHolder extends RecyclerView.ViewHolder {
-        TextView txtDate, txtMsg;
+        TextView txtDate, txtMsg, txtStatus;
 
         public MyViewHolder(View v) {
             super(v);
             txtMsg = v.findViewById(R.id.txtMsg);
             txtDate = v.findViewById(R.id.txtDate);
+            txtStatus = v.findViewById(R.id.txtStatus);
         }
     }
 
@@ -77,6 +82,25 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.MyViewHolder> {
         LogLine ll = datas.get(position);
         holder.txtDate.setText(ll.date);
         holder.txtMsg.setText(ll.message);
+
+        if (ll.status != null && !ll.status.isEmpty()) {
+            holder.txtStatus.setVisibility(View.VISIBLE);
+
+            // Build status text with a green dot symbol + status text
+            String statusText = " ● " + ll.status;
+
+            if (ll.status.startsWith("ACK")) {
+                SpannableString span = new SpannableString(statusText);
+                span.setSpan(new ForegroundColorSpan(Color.parseColor("#2E7D32")), 0, statusText.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                holder.txtStatus.setText(span);
+            } else {
+                SpannableString span = new SpannableString(statusText);
+                span.setSpan(new ForegroundColorSpan(Color.parseColor("#C62828")), 0, statusText.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                holder.txtStatus.setText(span);
+            }
+        } else {
+            holder.txtStatus.setVisibility(View.GONE);
+        }
     }
 
     @Override

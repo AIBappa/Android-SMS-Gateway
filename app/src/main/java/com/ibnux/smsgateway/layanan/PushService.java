@@ -306,7 +306,7 @@ public class PushService extends Service {
 
     }
 
-    static public void writeLog(String message, Context cx){
+    static public LogLine writeLog(String message, Context cx){
         try {
             SharedPreferences sp = cx.getSharedPreferences("pref", 0);
             int maxEntries = sp.getInt("live_stream_max", 100);
@@ -323,6 +323,7 @@ public class PushService extends Service {
         
         LiveLogBuffer.add(ll);
         tellMainActivity();
+        return ll;
     }
 
 }
