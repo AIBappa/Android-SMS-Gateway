@@ -1,11 +1,9 @@
 package com.ibnux.smsgateway;
 
-import android.Manifest;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
@@ -20,7 +18,6 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -43,6 +40,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.security.SecureRandom;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -110,16 +108,18 @@ public class SettingsFragment extends Fragment {
         Context ctx = requireContext();
 
         // a) Secret ID
-        addEditableField("Secret ID", sp.getString("secret", ""), value -> {
+        addLockableField("Secret ID", sp.getString("secret", ""), value -> {
             sp.edit().putString("secret", value).commit();
             logAction("Changed Secret ID", "New Secret set manually");
         });
         addButton("Generate New Secret", v -> {
-            String newSecret = UUID.randomUUID().toString();
-            sp.edit().putString("secret", newSecret).commit();
-            logAction("Generated Secret", "New Secret generated");
-            Toast.makeText(ctx, "New Secret Generated", Toast.LENGTH_SHORT).show();
-            setupPushUssdMenu(); // Refresh UI
+            showGenerateConfirmationDialog(ctx, "Secret", () -> {
+                String newSecret = UUID.randomUUID().toString();
+                sp.edit().putString("secret", newSecret).commit();
+                logAction("Generated Secret", "New Secret generated");
+                Toast.makeText(ctx, "New Secret Generated", Toast.LENGTH_SHORT).show();
+                setupPushUssdMenu(); // Refresh UI
+            });
         });
 
         // b) Device ID
@@ -135,13 +135,13 @@ public class SettingsFragment extends Fragment {
         });
 
         // e) Push USSD URL
-        addEditableField("Push USSD URL", sp.getString("urlUssd", ""), value -> {
+        addLockableField("Push USSD URL", sp.getString("urlUssd", ""), value -> {
             sp.edit().putString("urlUssd", value).commit();
             logAction("Updated USSD URL", value);
         });
         
         // f) Change Expired
-        addEditableField("Request Expiry (Seconds)", String.valueOf(sp.getInt("expired", 3600)), value -> {
+        addLockableField("Request Expiry (Seconds)", String.valueOf(sp.getInt("expired", 3600)), value -> {
             try {
                 int exp = Integer.parseInt(value);
                 if(exp < 5) exp = 5;
@@ -158,7 +158,7 @@ public class SettingsFragment extends Fragment {
         wsInfo.setPadding(0, 30, 0, 10);
         containerSubMenuContent.addView(wsInfo);
 
-        addEditableField("WebSocket Server URL (wss://)", sp.getString("websocket_url", ""), value -> {
+        addLockableField("WebSocket Server URL (wss://)", sp.getString("websocket_url", ""), value -> {
             sp.edit().putString("websocket_url", value).commit();
             logAction("Updated WebSocket URL", value);
         });
@@ -190,7 +190,7 @@ public class SettingsFragment extends Fragment {
         LinearLayout dispatchSection = createSection(ctx, "Dispatcher & Gatekeeper");
 
         // Timeout
-        addEditableFieldToLayout(dispatchSection, "Network Timeout (Seconds)", String.valueOf(sp.getInt("network_timeout", 15)), value -> {
+        addLockableFieldToLayout(dispatchSection, "Network Timeout (Seconds)", String.valueOf(sp.getInt("network_timeout", 15)), value -> {
             try {
                 int timeout = Integer.parseInt(value);
                 if(timeout < 1) timeout = 1;
@@ -208,7 +208,7 @@ public class SettingsFragment extends Fragment {
         });
         dispatchSection.addView(swPrimary);
 
-        addEditableFieldToLayout(dispatchSection, "Receiver URL (Primary)", sp.getString("urlPost", ""), value -> {
+        addLockableFieldToLayout(dispatchSection, "Receiver URL (Primary)", sp.getString("urlPost", ""), value -> {
             sp.edit().putString("urlPost", value).commit();
             logAction("Updated Receiver URL", value);
         });
@@ -222,7 +222,7 @@ public class SettingsFragment extends Fragment {
         });
         dispatchSection.addView(swBackup);
 
-        addEditableFieldToLayout(dispatchSection, "Backup URL", sp.getString("backup_url", ""), value -> {
+        addLockableFieldToLayout(dispatchSection, "Backup URL", sp.getString("backup_url", ""), value -> {
             sp.edit().putString("backup_url", value).commit();
             logAction("Updated Backup URL", value);
         });
@@ -242,52 +242,22 @@ public class SettingsFragment extends Fragment {
         streamABearerSection.addView(swBearerA);
 
         String currentBearerA = SecurityUtil.getBearerToken(ctx);
-        EditText etBearerA = new EditText(ctx);
-        etBearerA.setHint("Bearer Token");
-        etBearerA.setText(currentBearerA != null ? currentBearerA : "");
-        streamABearerSection.addView(etBearerA);
+        addLockableSecretFieldToLayout(streamABearerSection, "Bearer Token",
+                currentBearerA != null ? currentBearerA : "",
+                () -> {
+                    String newToken = SecurityUtil.generateBearerToken();
+                    SecurityUtil.saveBearerToken(ctx, newToken);
+                    logAction("Updated Bearer Token A", "Generated and saved new token");
+                    return newToken;
+                },
+                value -> {
+                    SecurityUtil.saveBearerToken(ctx, value);
+                    logAction("Updated Bearer Token A", "New token saved");
+                },
+                () -> SecurityUtil.getBearerToken(ctx),
+                "Bearer Token",
+                ctx);
 
-        LinearLayout bearerAButtons = new LinearLayout(ctx);
-        bearerAButtons.setOrientation(LinearLayout.HORIZONTAL);
-        
-        Button btnGenBearerA = new Button(ctx);
-        btnGenBearerA.setText("Generate");
-        btnGenBearerA.setOnClickListener(v -> {
-            String newToken = SecurityUtil.generateBearerToken();
-            etBearerA.setText(newToken);
-            Toast.makeText(ctx, "Token Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
-        });
-        
-        Button btnSaveBearerA = new Button(ctx);
-        btnSaveBearerA.setText("Save");
-        btnSaveBearerA.setOnClickListener(v -> {
-            String token = etBearerA.getText().toString();
-            if(!token.isEmpty()) {
-                SecurityUtil.saveBearerToken(ctx, token);
-                logAction("Updated Bearer Token A", "New token saved");
-                Toast.makeText(ctx, "Token Saved", Toast.LENGTH_SHORT).show();
-            }
-        });
-        
-        Button btnCopyBearerA = new Button(ctx);
-        btnCopyBearerA.setText("Copy");
-        btnCopyBearerA.setOnClickListener(v -> {
-            String activeToken = SecurityUtil.getBearerToken(ctx);
-            if(activeToken != null) {
-                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("Bearer Token A", activeToken);
-                clipboard.setPrimaryClip(clip);
-                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(ctx, "No Active Token", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        bearerAButtons.addView(btnGenBearerA);
-        bearerAButtons.addView(btnSaveBearerA);
-        bearerAButtons.addView(btnCopyBearerA);
-        streamABearerSection.addView(bearerAButtons);
-        
         containerSubMenuContent.addView(streamABearerSection);
 
         // --- Stream A Section: HMAC-SHA256 Signing ---
@@ -303,52 +273,22 @@ public class SettingsFragment extends Fragment {
         streamAHmacSection.addView(swHmac);
 
         String currentHmacKey = SecurityUtil.getHmacKey(ctx);
-        EditText etHmacKey = new EditText(ctx);
-        etHmacKey.setHint("HMAC Key (Base64)");
-        etHmacKey.setText(currentHmacKey != null ? currentHmacKey : "");
-        streamAHmacSection.addView(etHmacKey);
+        addLockableSecretFieldToLayout(streamAHmacSection, "HMAC Key (Base64)",
+                currentHmacKey != null ? currentHmacKey : "",
+                () -> {
+                    String newKey = SecurityUtil.generateHmacKey();
+                    SecurityUtil.saveHmacKey(ctx, newKey);
+                    logAction("Updated HMAC Key", "Generated and saved new key");
+                    return newKey;
+                },
+                value -> {
+                    SecurityUtil.saveHmacKey(ctx, value);
+                    logAction("Updated HMAC Key", "New key saved");
+                },
+                () -> SecurityUtil.getHmacKey(ctx),
+                "HMAC Key",
+                ctx);
 
-        LinearLayout hmacKeyButtons = new LinearLayout(ctx);
-        hmacKeyButtons.setOrientation(LinearLayout.HORIZONTAL);
-        
-        Button btnGenHmacKey = new Button(ctx);
-        btnGenHmacKey.setText("Generate");
-        btnGenHmacKey.setOnClickListener(v -> {
-            String newKey = SecurityUtil.generateHmacKey();
-            etHmacKey.setText(newKey);
-            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
-        });
-        
-        Button btnSaveHmacKey = new Button(ctx);
-        btnSaveHmacKey.setText("Save");
-        btnSaveHmacKey.setOnClickListener(v -> {
-            String key = etHmacKey.getText().toString();
-            if(!key.isEmpty()) {
-                SecurityUtil.saveHmacKey(ctx, key);
-                logAction("Updated HMAC Key", "New HMAC key saved");
-                Toast.makeText(ctx, "HMAC Key Saved", Toast.LENGTH_SHORT).show();
-            }
-        });
-        
-        Button btnCopyHmacKey = new Button(ctx);
-        btnCopyHmacKey.setText("Copy");
-        btnCopyHmacKey.setOnClickListener(v -> {
-            String activeKey = SecurityUtil.getHmacKey(ctx);
-            if(activeKey != null) {
-                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("HMAC Key", activeKey);
-                clipboard.setPrimaryClip(clip);
-                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        hmacKeyButtons.addView(btnGenHmacKey);
-        hmacKeyButtons.addView(btnSaveHmacKey);
-        hmacKeyButtons.addView(btnCopyHmacKey);
-        streamAHmacSection.addView(hmacKeyButtons);
-        
         containerSubMenuContent.addView(streamAHmacSection);
 
         // --- Stream A Section: AES-GCM Encryption ---
@@ -364,52 +304,22 @@ public class SettingsFragment extends Fragment {
         streamAAesSection.addView(swEncryption);
 
         String currentKey = SecurityUtil.getSharedKey(ctx);
-        EditText etAesKey = new EditText(ctx);
-        etAesKey.setHint("AES Key (Base64)");
-        etAesKey.setText(currentKey != null ? currentKey : "");
-        streamAAesSection.addView(etAesKey);
+        addLockableSecretFieldToLayout(streamAAesSection, "AES Key (Base64)",
+                currentKey != null ? currentKey : "",
+                () -> {
+                    String newKey = SecurityUtil.generateNewKey();
+                    SecurityUtil.saveKey(ctx, newKey);
+                    logAction("Updated AES Key", "Generated and saved new key");
+                    return newKey;
+                },
+                value -> {
+                    SecurityUtil.saveKey(ctx, value);
+                    logAction("Updated AES Key", "New key saved");
+                },
+                () -> SecurityUtil.getSharedKey(ctx),
+                "AES Key",
+                ctx);
 
-        LinearLayout aesKeyButtons = new LinearLayout(ctx);
-        aesKeyButtons.setOrientation(LinearLayout.HORIZONTAL);
-        
-        Button btnGenAesKey = new Button(ctx);
-        btnGenAesKey.setText("Generate");
-        btnGenAesKey.setOnClickListener(v -> {
-            String newKey = SecurityUtil.generateNewKey();
-            etAesKey.setText(newKey);
-            Toast.makeText(ctx, "Key Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
-        });
-        
-        Button btnSaveAesKey = new Button(ctx);
-        btnSaveAesKey.setText("Save");
-        btnSaveAesKey.setOnClickListener(v -> {
-            String key = etAesKey.getText().toString();
-            if(!key.isEmpty()) {
-                SecurityUtil.saveKey(ctx, key);
-                logAction("Updated AES Key", "New key saved");
-                Toast.makeText(ctx, "Key Saved", Toast.LENGTH_SHORT).show();
-            }
-        });
-        
-        Button btnCopyAesKey = new Button(ctx);
-        btnCopyAesKey.setText("Copy");
-        btnCopyAesKey.setOnClickListener(v -> {
-            String activeKey = SecurityUtil.getSharedKey(ctx);
-            if(activeKey != null) {
-                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("AES Key", activeKey);
-                clipboard.setPrimaryClip(clip);
-                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(ctx, "No Active Key", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        aesKeyButtons.addView(btnGenAesKey);
-        aesKeyButtons.addView(btnSaveAesKey);
-        aesKeyButtons.addView(btnCopyAesKey);
-        streamAAesSection.addView(aesKeyButtons);
-        
         containerSubMenuContent.addView(streamAAesSection);
 
         // --- Stream B Section: Bearer Token ---
@@ -425,52 +335,22 @@ public class SettingsFragment extends Fragment {
         streamBBearerSection.addView(swBearerB);
 
         String currentBearerB = SecurityUtil.getBearerTokenStreamB(ctx);
-        EditText etBearerB = new EditText(ctx);
-        etBearerB.setHint("Bearer Token");
-        etBearerB.setText(currentBearerB != null ? currentBearerB : "");
-        streamBBearerSection.addView(etBearerB);
+        addLockableSecretFieldToLayout(streamBBearerSection, "Bearer Token",
+                currentBearerB != null ? currentBearerB : "",
+                () -> {
+                    String newToken = SecurityUtil.generateBearerToken();
+                    SecurityUtil.saveBearerTokenStreamB(ctx, newToken);
+                    logAction("Updated Bearer Token B", "Generated and saved new token");
+                    return newToken;
+                },
+                value -> {
+                    SecurityUtil.saveBearerTokenStreamB(ctx, value);
+                    logAction("Updated Bearer Token B", "New token saved");
+                },
+                () -> SecurityUtil.getBearerTokenStreamB(ctx),
+                "Bearer Token",
+                ctx);
 
-        LinearLayout bearerBButtons = new LinearLayout(ctx);
-        bearerBButtons.setOrientation(LinearLayout.HORIZONTAL);
-        
-        Button btnGenBearerB = new Button(ctx);
-        btnGenBearerB.setText("Generate");
-        btnGenBearerB.setOnClickListener(v -> {
-            String newToken = SecurityUtil.generateBearerToken();
-            etBearerB.setText(newToken);
-            Toast.makeText(ctx, "Token Generated (Not Saved Yet)", Toast.LENGTH_SHORT).show();
-        });
-        
-        Button btnSaveBearerB = new Button(ctx);
-        btnSaveBearerB.setText("Save");
-        btnSaveBearerB.setOnClickListener(v -> {
-            String token = etBearerB.getText().toString();
-            if(!token.isEmpty()) {
-                SecurityUtil.saveBearerTokenStreamB(ctx, token);
-                logAction("Updated Bearer Token B", "New token saved");
-                Toast.makeText(ctx, "Token Saved", Toast.LENGTH_SHORT).show();
-            }
-        });
-        
-        Button btnCopyBearerB = new Button(ctx);
-        btnCopyBearerB.setText("Copy");
-        btnCopyBearerB.setOnClickListener(v -> {
-            String activeToken = SecurityUtil.getBearerTokenStreamB(ctx);
-            if(activeToken != null) {
-                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("Bearer Token B", activeToken);
-                clipboard.setPrimaryClip(clip);
-                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(ctx, "No Active Token", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        bearerBButtons.addView(btnGenBearerB);
-        bearerBButtons.addView(btnSaveBearerB);
-        bearerBButtons.addView(btnCopyBearerB);
-        streamBBearerSection.addView(bearerBButtons);
-        
         containerSubMenuContent.addView(streamBBearerSection);
 
         // --- Filters Section ---
@@ -875,7 +755,13 @@ public class SettingsFragment extends Fragment {
     }
 
     // --- Helpers ---
-    private void addEditableField(String label, String value, OnSaveListener listener) {
+
+    /**
+     * Lockable field with Edit/Save toggle.
+     * Locked state: Edit button visible, field greyed out.
+     * Editing state: Save button visible, field enabled.
+     */
+    private void addLockableField(String label, String value, OnSaveListener listener) {
         Context ctx = requireContext();
         LinearLayout layout = new LinearLayout(ctx);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -887,18 +773,214 @@ public class SettingsFragment extends Fragment {
 
         EditText et = new EditText(ctx);
         et.setText(value);
+        setFieldLocked(et, true);
 
-        Button btn = new Button(ctx);
-        btn.setText("Save " + label);
-        btn.setOnClickListener(v -> {
+        LinearLayout buttonRow = new LinearLayout(ctx);
+        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button btnEdit = new Button(ctx);
+        btnEdit.setText("\u270E");
+        btnEdit.setOnClickListener(v -> {
+            setFieldLocked(et, false);
+            btnEdit.setVisibility(View.GONE);
+            btnSave.setVisibility(View.VISIBLE);
+        });
+
+        Button btnSave = new Button(ctx);
+        btnSave.setText("Save");
+        btnSave.setVisibility(View.GONE);
+        btnSave.setOnClickListener(v -> {
             listener.onSave(et.getText().toString());
+            setFieldLocked(et, true);
+            btnEdit.setVisibility(View.VISIBLE);
+            btnSave.setVisibility(View.GONE);
             Toast.makeText(ctx, "Saved", Toast.LENGTH_SHORT).show();
         });
 
+        buttonRow.addView(btnEdit);
+        buttonRow.addView(btnSave);
         layout.addView(tv);
         layout.addView(et);
-        layout.addView(btn);
+        layout.addView(buttonRow);
         containerSubMenuContent.addView(layout);
+    }
+
+    /**
+     * Lockable field inside a section (LinearLayout parent).
+     * Locked state: Edit button visible, field greyed out.
+     * Editing state: Save button visible, field enabled.
+     */
+    private void addLockableFieldToLayout(LinearLayout parent, String label, String value, OnSaveListener listener) {
+        Context ctx = requireContext();
+        TextView tv = new TextView(ctx);
+        tv.setText(label);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+
+        EditText et = new EditText(ctx);
+        et.setText(value);
+        setFieldLocked(et, true);
+
+        LinearLayout buttonRow = new LinearLayout(ctx);
+        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button btnEdit = new Button(ctx);
+        btnEdit.setText("\u270E");
+        btnEdit.setOnClickListener(v -> {
+            setFieldLocked(et, false);
+            btnEdit.setVisibility(View.GONE);
+            btnSave.setVisibility(View.VISIBLE);
+        });
+
+        Button btnSave = new Button(ctx);
+        btnSave.setText("Save");
+        btnSave.setVisibility(View.GONE);
+        btnSave.setOnClickListener(v -> {
+            listener.onSave(et.getText().toString());
+            setFieldLocked(et, true);
+            btnEdit.setVisibility(View.VISIBLE);
+            btnSave.setVisibility(View.GONE);
+            Toast.makeText(ctx, "Saved", Toast.LENGTH_SHORT).show();
+        });
+
+        buttonRow.addView(btnEdit);
+        buttonRow.addView(btnSave);
+        parent.addView(tv);
+        parent.addView(et);
+        parent.addView(buttonRow);
+    }
+
+    /**
+     * Lockable secret field with Generate/Copy (in locked state) and Edit/Save toggle.
+     * Locked state: Edit, Generate, Copy buttons visible; field greyed out.
+     * Editing state: Save button visible; Edit, Generate, Copy hidden; field enabled.
+     * Generate triggers a 4-digit confirmation dialog before generating.
+     */
+    private void addLockableSecretFieldToLayout(LinearLayout parent, String hint,
+                                                String currentValue,
+                                                final GenerateAction generateAction,
+                                                final OnSaveListener saveAction,
+                                                final CopyAction copyAction,
+                                                String generateItemName,
+                                                Context ctx) {
+        EditText et = new EditText(ctx);
+        et.setHint(hint);
+        et.setText(currentValue);
+        setFieldLocked(et, true);
+
+        LinearLayout buttonRow = new LinearLayout(ctx);
+        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button btnEdit = new Button(ctx);
+        btnEdit.setText("\u270E");
+        btnEdit.setOnClickListener(v -> {
+            setFieldLocked(et, false);
+            btnEdit.setVisibility(View.GONE);
+            btnGenerate.setVisibility(View.GONE);
+            btnCopy.setVisibility(View.GONE);
+            btnSave.setVisibility(View.VISIBLE);
+        });
+
+        Button btnSave = new Button(ctx);
+        btnSave.setText("Save");
+        btnSave.setVisibility(View.GONE);
+        btnSave.setOnClickListener(v -> {
+            String val = et.getText().toString();
+            if(!val.isEmpty()) {
+                saveAction.onSave(val);
+                setFieldLocked(et, true);
+                btnEdit.setVisibility(View.VISIBLE);
+                btnGenerate.setVisibility(View.VISIBLE);
+                btnCopy.setVisibility(View.VISIBLE);
+                btnSave.setVisibility(View.GONE);
+                Toast.makeText(ctx, "Saved", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        Button btnGenerate = new Button(ctx);
+        btnGenerate.setText("Generate");
+        btnGenerate.setOnClickListener(v -> {
+            showGenerateConfirmationDialog(ctx, generateItemName, () -> {
+                String newValue = generateAction.generate();
+                et.setText(newValue != null ? newValue : "");
+                // Keep locked state with Edit, Generate, Copy visible
+                setFieldLocked(et, true);
+                btnEdit.setVisibility(View.VISIBLE);
+                btnGenerate.setVisibility(View.VISIBLE);
+                btnCopy.setVisibility(View.VISIBLE);
+                btnSave.setVisibility(View.GONE);
+                Toast.makeText(ctx, generateItemName + " Generated & Saved", Toast.LENGTH_SHORT).show();
+            });
+        });
+
+        Button btnCopy = new Button(ctx);
+        btnCopy.setText("Copy");
+        btnCopy.setOnClickListener(v -> {
+            String activeValue = copyAction.getCopyValue();
+            if(activeValue != null) {
+                ClipboardManager clipboard = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText(hint, activeValue);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(ctx, "Copied to Clipboard", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "No Active " + generateItemName, Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        buttonRow.addView(btnEdit);
+        buttonRow.addView(btnSave);
+        buttonRow.addView(btnGenerate);
+        buttonRow.addView(btnCopy);
+        parent.addView(et);
+        parent.addView(buttonRow);
+    }
+
+    /**
+     * Show a confirmation dialog with a random 4-digit number.
+     * User must type the exact number to confirm the action.
+     */
+    private void showGenerateConfirmationDialog(Context ctx, String itemName, Runnable onConfirm) {
+        SecureRandom random = new SecureRandom();
+        int code = 1000 + random.nextInt(9000); // 4-digit number
+        final String codeStr = String.valueOf(code);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
+        builder.setTitle("Generate New " + itemName);
+        builder.setMessage("Type the following 4-digit number to confirm:\n\n" + code);
+
+        final EditText input = new EditText(ctx);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setHint("Enter " + codeStr.length() + " digits");
+
+        LinearLayout layout = new LinearLayout(ctx);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 10);
+        layout.addView(input);
+        builder.setView(layout);
+
+        builder.setPositiveButton("Confirm", null);
+        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss());
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String entered = input.getText().toString().trim();
+            if (entered.equals(codeStr)) {
+                onConfirm.run();
+                dialog.dismiss();
+            } else {
+                input.setError("Incorrect number");
+                Toast.makeText(ctx, "Numbers don't match. Try again.", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    /**
+     * Enable or disable a field with greyed-out appearance when locked.
+     */
+    private void setFieldLocked(EditText et, boolean locked) {
+        et.setEnabled(!locked);
+        et.setAlpha(locked ? 0.5f : 1.0f);
     }
 
     private void addReadOnlyField(String label, String value) {
@@ -1121,6 +1203,14 @@ public class SettingsFragment extends Fragment {
         void onSave(String value);
     }
 
+    interface GenerateAction {
+        String generate();
+    }
+
+    interface CopyAction {
+        String getCopyValue();
+    }
+
     // Helpers
     private LinearLayout createSection(Context ctx, String title) {
         LinearLayout section = new LinearLayout(ctx);
@@ -1143,6 +1233,7 @@ public class SettingsFragment extends Fragment {
         return section;
     }
     
+    // Always-editable field (preserved for fields like Live Stream Max Entries)
     private void addEditableFieldToLayout(LinearLayout parent, String label, String value, OnSaveListener listener) {
         Context ctx = requireContext();
         TextView tv = new TextView(ctx);
