@@ -79,7 +79,9 @@ public class PostQueueManager {
                     GatewayLogger.log(context, "HMAC", "HMAC_SIGN_SUCCESS: Signature added to " + targetUrl);
                 } else {
                     GatewayLogger.log(context, "HMAC", "HMAC_SIGN_FAILED: Could not generate signature for " + targetUrl);
-                    LiveLogBuffer.updateLatestStatus(logLine, "ERR");
+                    if (logLine != null) {
+                        LiveLogBuffer.updateLatestStatus(logLine, "ERR");
+                    }
                     tellMainActivity();
                     return;
                 }
@@ -94,20 +96,26 @@ public class PostQueueManager {
             int responseCode = conn.getResponseCode();
 
             if (responseCode >= 200 && responseCode < 300) {
-                LiveLogBuffer.updateLatestStatus(logLine, "ACK [" + responseCode + "]");
+                if (logLine != null) {
+                    LiveLogBuffer.updateLatestStatus(logLine, "ACK [" + responseCode + "]");
+                }
                 tellMainActivity();
                 GatewayLogger.log(context, "POST_SUCCESS", "URL: " + targetUrl + " | Code: " + responseCode);
                 if (logSuccess) {
                     PushService.writeLog("SMS: POST : " + targetUrl + " : Code " + responseCode, context);
                 }
             } else {
-                LiveLogBuffer.updateLatestStatus(logLine, "FAIL [" + responseCode + "]");
+                if (logLine != null) {
+                    LiveLogBuffer.updateLatestStatus(logLine, "FAIL [" + responseCode + "]");
+                }
                 tellMainActivity();
                 GatewayLogger.log(context, "POST_FAIL", "HTTP " + responseCode + " | URL: " + targetUrl);
                 PushService.writeLog("SMS: POST FAILED : " + targetUrl + " : HTTP " + responseCode, context);
             }
         } catch (Exception e) {
-            LiveLogBuffer.updateLatestStatus(logLine, "ERR");
+            if (logLine != null) {
+                LiveLogBuffer.updateLatestStatus(logLine, "ERR");
+            }
             tellMainActivity();
             GatewayLogger.log(context, "POST_ERROR", e.getMessage() + " | URL: " + targetUrl);
             PushService.writeLog("SMS: POST FAILED : " + targetUrl + " : " + e.getMessage(), context);

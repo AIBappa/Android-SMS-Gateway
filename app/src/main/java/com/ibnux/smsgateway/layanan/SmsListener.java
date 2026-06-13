@@ -191,8 +191,10 @@ public class SmsListener extends BroadcastReceiver {
                     wrapper.put("payload", SecurityUtil.encrypt(json.toString(), key));
                     finalPayload = wrapper.toString();
                 } else {
-                    // Fallback if key missing but encryption enabled
-                    finalPayload = json.toString();
+                    GatewayLogger.log(context, "ENCRYPTION_ERROR",
+                        "Encryption enabled but shared key is null. Destination: " + urlPost + ". Aborting POST to prevent unencrypted send.");
+                    writeLog("ENCRYPTION CRITICAL: Shared key null - skipping POST to " + urlPost, context);
+                    return;
                 }
             } else {
                 finalPayload = json.toString();
