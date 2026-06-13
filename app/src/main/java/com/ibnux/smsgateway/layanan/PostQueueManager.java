@@ -79,6 +79,8 @@ public class PostQueueManager {
                     GatewayLogger.log(context, "HMAC", "HMAC_SIGN_SUCCESS: Signature added to " + targetUrl);
                 } else {
                     GatewayLogger.log(context, "HMAC", "HMAC_SIGN_FAILED: Could not generate signature for " + targetUrl);
+                    LiveLogBuffer.updateLatestStatus(logLine, "ERR");
+                    tellMainActivity();
                     return;
                 }
             }
